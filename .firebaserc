@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "visionapiproject-445610"
+  },
+  "targets": {
+    "visionapiproject-445610": {
+      "hosting": {
+        "memo-app-cbff6": [
+          "memo-app-cbff6"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

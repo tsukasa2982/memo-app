@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <!-- レスポンシブ対応のためのビューポート設定 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .note-actions button { background: none; border: none; cursor: pointer; color: #9ca3af; }
+    .note-actions button:hover { color: #1f2937; }
+    #app-message {
+        position: fixed;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: #4CAF50; /* Green */
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        z-index: 1000;
+        display: none; /* 初期状態では非表示 */
+        opacity: 0;
+        transition: opacity 0.5s ease-in-out;
+    }
+    #app-message.error {
+        background-color: #f44336; /* Red */
+    }
+    .note-thread {
+        background-color: #ffffff;
+        border-radius: 0.75rem; /* rounded-xl */
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); /* shadow-lg */
+        padding: 1rem; /* p-4 */
+        margin-bottom: 1rem; /* space-y-4 の代わり */
+        transition: opacity 0.3s ease-in-out, background-color 0.3s ease-in-out;
+        border: 1px solid transparent;
+    }
+    .note-thread.highlighted {
+        background-color: #fffbeb;
+        border-color: #fde68a;
+    }
+    .comment-item {
+        margin-top: 0.5rem; /* space-y-2 */
+        margin-left: 2.5rem; /* ml-10 */
+        border-left: 2px solid #e5e7eb; /* border-l-2 border-gray-200 */
+        padding-left: 1rem; /* pl-4 */
+        padding-top: 0.5rem; /* pt-2 */
+    }
+    .comment-form-container {
+        margin-top: 0.5rem;
+        margin-left: 2.5rem; /* ml-10 */
+        border-left: 2px solid #e5e7eb; /* border-l-2 border-gray-200 */
+        padding-left: 1rem; /* pl-4 */
+        padding-top: 0.5rem; /* pt-2 */
+    }
+    .task-button {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+    }
+    .task-button-actions button {
+      visibility: hidden;
+      opacity: 0;
+      transition: opacity 0.2s ease-in-out;
+    }
+    .task-button:hover .task-button-actions button {
+      visibility: visible;
+      opacity: 1;
+    }
+    .attachment-link {
+      display: inline-block;
+      margin-top: 8px;
+      margin-right: 8px;
+      padding: 4px 8px;
+      background-color: #f0f4f8;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #333;
+      text-decoration: none;
+    }
+    .attachment-link:hover {
+      background-color: #e0e8f0;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+  <!-- ワークスペース選択画面 -->
+  <div id="workspace-selector" class="hidden flex items-center justify-center h-screen">
+    <div class="w-full max-w-2xl p-8 bg-white rounded-lg shadow-xl max-h-[80vh] flex flex-col">
+      <h1 class="text-2xl font-bold text-center text-gray-700 mb-6">ワークスペース管理</h1>
+      <div class="flex-grow overflow-y-auto pr-4">
+        <div id="workspace-list" class="space-y-3"></div>
+      </div>
+      <div class="mt-6 pt-6 border-t">
+        <h2 class="text-lg font-semibold mb-2">新しいワークスペースを追加</h2>
+        <form id="add-workspace-form" class="flex items-center space-x-2">
+          <input type="text" id="new-workspace-name" class="w-1/2 border rounded px-2 py-1" placeholder="表示名 (例: A顧問先)" required>
+          <input type="text" id="new-workspace-id" class="w-1/2 border rounded px-2 py-1" placeholder="ID (例: client_a)" required>
+          <button type="submit" class="px-4 py-1 text-white bg-blue-500 rounded hover:bg-blue-600">追加</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- メインのアプリ画面 -->
+  <div id="app-container" class="hidden relative h-screen w-screen overflow-x-hidden md:flex">
+    <!-- Sidebar -->
+    <div id="task-list-sidebar" class="absolute md:relative top-0 left-0 w-full h-full md:w-1/4 flex flex-col p-4 bg-white border-r transition-transform duration-300 ease-in-out">
+      <div class="pb-4 mb-4 border-b flex justify-between items-center">
+        <h2 id="workspace-title" class="text-lg font-semibold"></h2>
+        <a id="home-link" href="/?admin=true" title="ワークスペース選択に戻る" class="text-gray-400 hover:text-blue-500"><i class="fas fa-home"></i></a>
+      </div>
+      <div class="flex items-center justify-between text-sm mb-2">
+        <span class="font-semibold">作業内容リスト</span>
+        <button id="toggle-archive-btn" class="text-xs text-blue-500 hover:underline">アーカイブ表示</button>
+      </div>
+      <div id="task-buttons-container" class="flex-1 overflow-y-auto space-y-1"></div>
+      <div class="mt-4 pt-4 border-t">
+        <form id="add-task-form" class="space-y-2">
+          <input type="text" id="new-task-name" class="w-full border rounded px-2 py-1 text-sm" placeholder="新しい作業内容" required>
+          <button type="submit" class="w-full px-3 py-1 text-white bg-green-600 rounded hover:bg-green-700 text-sm">作業内容を追加</button>
+        </form>
+      </div>
+    </div>
+    <!-- Main Content -->
+    <div id="main-content-area" class="absolute md:relative top-0 left-0 w-full h-full md:w-3/4 flex flex-col p-4 bg-gray-100 transition-transform duration-300 ease-in-out translate-x-full md:translate-x-0">
+      <div id="main-content-placeholder" class="flex-1 flex items-center justify-center"><p>左側のリストから作業内容を選択してください。</p></div>
+      <div id="task-notes-container" class="hidden flex flex-col h-full">
+        <div class="pb-2 mb-2 border-b flex justify-between items-center">
+            <div class="flex items-center">
+                <button id="back-to-tasks-btn" class="mr-4 text-gray-500"><i class="fas fa-arrow-left"></i></button>
+                <h1 id="task-title" class="text-xl font-bold"></h1>
+            </div>
+            <div><label for="author-input" class="text-sm mr-2">投稿者:</label><input type="text" id="author-input" class="p-1 border rounded text-sm w-32" placeholder="名前を入力"></div>
+        </div>
+        <form id="note-form" class="p-4 mb-4 bg-white rounded-xl shadow-lg">
+          <textarea id="note-textarea" class="w-full p-2 border rounded" placeholder="新しい話題（親メモ）を追加..." rows="2"></textarea>
+          <div id="note-attachments-preview" class="mt-2 text-xs"></div>
+          <div class="flex items-center justify-between mt-2">
+            <div class="flex items-center space-x-2">
+                <select id="status-select" class="p-2 border rounded"><option value="作業中">作業中</option><option value="要確認">要確認</option><option value="完了">完了</option></select>
+                <label for="note-file-input" class="cursor-pointer p-3 text-gray-500 hover:text-blue-500" title="ファイルを添付"><i class="fas fa-paperclip"></i></label>
+                <input type="file" id="note-file-input" class="hidden" multiple>
+            </div>
+            <button type="submit" class="px-4 py-2 text-white bg-blue-500 rounded-lg hover:bg-blue-600 font-semibold">新しい話題を追加</button>
+          </div>
+        </form>
+        <div id="notes-list" class="flex-1 overflow-y-auto pr-2"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- カスタムメッセージ表示用の要素 -->
+  <div id="app-message"></div>
+
+<!-- Firebase SDK -->
+<script type="module">
+  // Firebase SDKsをインポート
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getFirestore, collection, addDoc, doc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, query, orderBy, writeBatch, getDocs, getDoc, where, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+
+  // あなたのFirebaseプロジェクトの設定情報
+  const firebaseConfig = {
+    apiKey: "AIzaSyBoPbky1S2z99_pHec1pyV3kFaXWVDOK9A",
+    authDomain: "visionapiproject-445610.firebaseapp.com",
+    projectId: "visionapiproject-445610",
+    storageBucket: "visionapiproject-445610.firebasestorage.app",
+    messagingSenderId: "467175218532",
+    appId: "1:467175218532:web:1aa10f7f01ad788232ae71",
+    measurementId: "G-NNWVP7HH14"
+  };
+
+  // Firebaseアプリを初期化
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const storage = getStorage(app);
+
+  const params = new URLSearchParams(window.location.search);
+  const workspaceId = params.get('workspace');
+  const isAdmin = params.get('admin') === 'true';
+  let currentUser = null;
+
+  const appMessage = document.getElementById('app-message');
+  function showMessage(message, isError = false) {
+      appMessage.textContent = message;
+      appMessage.className = '';
+      if (isError) appMessage.classList.add('error');
+      appMessage.style.display = 'block';
+      appMessage.style.opacity = 1;
+      setTimeout(() => {
+          appMessage.style.opacity = 0;
+          setTimeout(() => { appMessage.style.display = 'none'; }, 500);
+      }, 3000);
+  }
+  
+  onAuthStateChanged(auth, user => {
+    currentUser = user;
+    const appContainer = document.getElementById('app-container');
+    const workspaceSelector = document.getElementById('workspace-selector');
+
+    if (user) {
+      if (workspaceId) {
+        workspaceSelector.style.display = 'none';
+        appContainer.style.display = 'flex';
+        initializeAppLogic(user, workspaceId);
+      } else if (isAdmin) {
+        appContainer.style.display = 'none';
+        workspaceSelector.style.display = 'flex';
+        displayWorkspaceSelector(user);
+      } else {
+        document.body.innerHTML = `
+          <div class="flex flex-col items-center justify-center h-screen bg-pink-50 text-gray-700 text-center p-4">
+            <i class="fas fa-user-secret fa-6x text-pink-300 mb-6 animate-bounce"></i>
+            <h1 class="text-5xl font-bold text-pink-500 mb-4">だめっ…！</h1>
+            <p class="text-xl">そこは開けちゃダメな扉です…！</p>
+            <div class="mt-8 text-left bg-white p-6 rounded-lg shadow-md max-w-md">
+                <p class="text-lg">ここは、管理者とクライアント様だけの、<br>とってもデリケートな情報が詰まった秘密の場所なんです。</p>
+                <p class="mt-4 text-gray-600">興味本位でURLを操作してここに辿り着いてしまったのだと思いますが、<br>中を覗くのは、どうかご遠慮くださいね…恥ずかしいので…。</p>
+                <p class="mt-6 text-sm text-pink-400 font-semibold">(もし招待されたご本人様でしたら、お渡しした正しいURLからアクセスをお願いしますね 🤫)</p>
+            </div>
+          </div>
+        `;
+      }
+    } else {
+      signInAnonymously(auth).catch(error => {
+        console.error("Anonymous sign-in failed:", error);
+        document.body.innerHTML = `<div class="flex items-center justify-center h-screen"><div class="text-center p-8 bg-white rounded-lg shadow-lg"><h1 class="text-2xl font-bold text-red-600 mb-4">認証エラー</h1><p>Firebaseへの接続に失敗しました。ページを再読み込みしてください。</p></div></div>`;
+      });
+    }
+  });
+
+  // --- ワークスペース管理機能 ---
+  async function displayWorkspaceSelector(user) {
+    const listElement = document.getElementById('workspace-list');
+    const addWorkspaceForm = document.getElementById('add-workspace-form');
+    
+    onSnapshot(query(collection(db, "workspaces"), orderBy("name")), (querySnapshot) => {
+      listElement.innerHTML = '';
+      if (querySnapshot.empty) {
+        listElement.innerHTML = '<p class="text-center text-gray-500">ワークスペースがありません。</p>';
+        return;
+      }
+      querySnapshot.forEach((doc) => {
+        const workspace = { id: doc.id, ...doc.data() };
+        const div = document.createElement('div');
+        div.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-lg';
+        
+        const lastViewed = localStorage.getItem(`lastViewed_workspace_${workspace.id}`) || 0;
+        const lastUpdatedMillis = workspace.lastUpdated ? workspace.lastUpdated.toMillis() : 0;
+        const isUnread = lastUpdatedMillis > lastViewed && workspace.lastUpdatedBy !== user.uid;
+        const indicatorHtml = isUnread ? `<span class="text-red-500 ml-2">●</span>` : '';
+
+        div.innerHTML = `
+          <div>
+            <a href="?workspace=${workspace.id}" class="workspace-link font-semibold text-blue-600 hover:underline flex items-center" data-id="${workspace.id}">
+              ${workspace.name} ${indicatorHtml}
+            </a>
+            <p class="text-xs text-gray-500">ID: ${workspace.id}</p>
+          </div>
+          <div class="space-x-2">
+            <button class="edit-workspace-btn text-gray-400 hover:text-green-500" data-id="${workspace.id}" data-name="${workspace.name}"><i class="fas fa-pencil-alt"></i></button>
+            <button class="delete-workspace-btn text-gray-400 hover:text-red-500" data-id="${workspace.id}" data-name="${workspace.name}"><i class="fas fa-trash-alt"></i></button>
+          </div>
+        `;
+        listElement.appendChild(div);
+      });
+    }, (error) => {
+      console.error("Error loading workspaces: ", error);
+      listElement.innerHTML = '<p class="text-center text-red-500">ワークスペースの読み込みに失敗しました。</p>';
+    });
+
+    addWorkspaceForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const nameInput = document.getElementById('new-workspace-name');
+      const idInput = document.getElementById('new-workspace-id');
+      const name = nameInput.value.trim();
+      const id = idInput.value.trim().replace(/\s+/g, '-');
+      if (!name || !id) return;
+      
+      try {
+        await setDoc(doc(db, "workspaces", id), { name: name, lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
+        nameInput.value = '';
+        idInput.value = '';
+        showMessage('ワークスペースを追加しました。');
+      } catch (error) {
+        console.error("Error adding workspace:", error);
+        showMessage('ワークスペースの追加に失敗しました。', true);
+      }
+    });
+
+    listElement.addEventListener('click', async (e) => {
+      const editBtn = e.target.closest('.edit-workspace-btn');
+      const deleteBtn = e.target.closest('.delete-workspace-btn');
+      const workspaceLink = e.target.closest('.workspace-link');
+      
+      if (workspaceLink) {
+        const id = workspaceLink.dataset.id;
+        localStorage.setItem(`lastViewed_workspace_${id}`, Date.now());
+      }
+      
+      if (editBtn) {
+        e.stopPropagation();
+        const id = editBtn.dataset.id;
+        const currentName = editBtn.dataset.name;
+        const newName = prompt("新しいワークスペース名を入力してください:", currentName);
+        if (newName && newName.trim() !== '') {
+          await updateDoc(doc(db, "workspaces", id), { name: newName.trim() });
+        }
+      }
+      
+      if (deleteBtn) {
+        e.stopPropagation();
+        const id = deleteBtn.dataset.id;
+        const name = deleteBtn.dataset.name;
+        if (confirm(`ワークスペース「${name}」を削除しますか？\nこの操作は元に戻せません。`)) {
+          await deleteDoc(doc(db, "workspaces", id));
+        }
+      }
+    });
+  }
+
+  // --- メインのメモアプリロジック ---
+  async function initializeAppLogic(user, workspaceId) {
+    let currentTask = null;
+    let unsubscribeNotes = null;
+    let allTasks = [];
+    let showArchived = false;
+    let noteFiles = [];
+    let commentFiles = {};
+
+    const authorInput = document.getElementById('author-input');
+    const taskListSidebar = document.getElementById('task-list-sidebar');
+    const mainContentArea = document.getElementById('main-content-area');
+    const taskButtonsContainer = document.getElementById('task-buttons-container');
+    const mainContentPlaceholder = document.getElementById('main-content-placeholder');
+    const taskNotesContainer = document.getElementById('task-notes-container');
+    const taskTitle = document.getElementById('task-title');
+    const notesList = document.getElementById('notes-list');
+    const noteForm = document.getElementById('note-form');
+    const addTaskForm = document.getElementById('add-task-form');
+    const toggleArchiveBtn = document.getElementById('toggle-archive-btn');
+    const noteFileInput = document.getElementById('note-file-input');
+    const noteAttachmentsPreview = document.getElementById('note-attachments-preview');
+    const backToTasksBtn = document.getElementById('back-to-tasks-btn');
+    const homeLink = document.getElementById('home-link');
+
+    if (!isAdmin) {
+      homeLink.style.display = 'none';
+    }
+
+    const workspaceRef = doc(db, "workspaces", workspaceId);
+    try {
+        const workspaceDoc = await getDoc(workspaceRef);
+        if (workspaceDoc.exists()) {
+            document.getElementById('workspace-title').textContent = workspaceDoc.data().name;
+        } else {
+            document.getElementById('workspace-title').textContent = `${workspaceId} (不明)`;
+        }
+    } catch {
+        document.getElementById('workspace-title').textContent = `${workspaceId} (エラー)`;
+    }
+
+    authorInput.value = localStorage.getItem('memoAuthor') || '';
+    authorInput.addEventListener('change', () => localStorage.setItem('memoAuthor', authorInput.value));
+    
+    const escapeHtml = str => { if(typeof str !== 'string')return''; const div=document.createElement('div'); div.textContent=str; return div.innerHTML; };
+    const getStatusIcon = status => { switch (status) { case '作業中': return '<i class="fas fa-cogs text-blue-500"></i>'; case '要確認': return '<i class="fas fa-exclamation-triangle text-yellow-500"></i>'; case '完了': return '<i class="fas fa-check-circle text-green-500"></i>'; default: return ''; } };
+
+    const tasksCollectionRef = collection(db, "workspaces", workspaceId, "tasks");
+    
+    onSnapshot(query(tasksCollectionRef, orderBy("createdAt", "desc")), (snapshot) => {
+        allTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        displayTasks();
+    });
+
+    toggleArchiveBtn.addEventListener('click', () => {
+        showArchived = !showArchived;
+        toggleArchiveBtn.textContent = showArchived ? '通常表示' : 'アーカイブ表示';
+        displayTasks();
+    });
+
+    function displayTasks() {
+        const tasksToDisplay = allTasks.filter(task => showArchived ? task.archived : !task.archived);
+        taskButtonsContainer.innerHTML = '';
+        if (tasksToDisplay.length === 0) {
+            taskButtonsContainer.innerHTML = `<p class="text-xs text-gray-500 p-2">${showArchived ? 'アーカイブされた作業はありません。' : '作業内容を追加してください。'}</p>`;
+            return;
+        }
+        tasksToDisplay.forEach(task => taskButtonsContainer.appendChild(createTaskButton(task)));
+    }
+
+    function createTaskButton(task) {
+        const button = document.createElement('div');
+        button.className = 'task-button w-full text-left p-2 text-sm rounded-lg hover:bg-gray-100 cursor-pointer';
+        if (currentTask && currentTask.id === task.id) button.classList.add('bg-blue-100', 'text-blue-800', 'font-semibold');
+        
+        const lastViewed = localStorage.getItem(`lastViewed_${workspaceId}_${task.id}`) || 0;
+        const lastUpdatedMillis = task.lastUpdated ? task.lastUpdated.toMillis() : 0;
+        const isUnread = lastUpdatedMillis > lastViewed && task.lastUpdatedBy !== user.uid;
+        const indicatorHtml = isUnread ? `<span class="text-red-500 ml-2">●</span>` : '';
+
+        button.innerHTML = `
+            <span class="flex items-center">${escapeHtml(task.name)} ${indicatorHtml}</span>
+            <div class="task-button-actions space-x-2">
+                <button title="${task.archived ? 'アーカイブ解除' : 'アーカイブ'}" class="archive-task-btn text-gray-400 hover:text-yellow-500" data-id="${task.id}" data-archived="${task.archived || false}"><i class="fas fa-archive"></i></button>
+                <button title="削除" class="delete-task-btn text-gray-400 hover:text-red-500" data-id="${task.id}" data-name="${task.name}"><i class="fas fa-trash-alt"></i></button>
+            </div>
+        `;
+        button.onclick = (e) => {
+            if (!e.target.closest('button')) selectTask(task);
+        };
+        return button;
+    }
+
+    taskButtonsContainer.addEventListener('click', async (e) => {
+        const archiveBtn = e.target.closest('.archive-task-btn');
+        const deleteBtn = e.target.closest('.delete-task-btn');
+        if (archiveBtn) {
+            const id = archiveBtn.dataset.id;
+            const isArchived = archiveBtn.dataset.archived === 'true';
+            await updateDoc(doc(tasksCollectionRef, id), { archived: !isArchived });
+        }
+        if (deleteBtn) {
+            const id = deleteBtn.dataset.id;
+            const name = deleteBtn.dataset.name;
+            if (confirm(`作業内容「${name}」を削除しますか？`)) {
+                await deleteDoc(doc(tasksCollectionRef, id));
+            }
+        }
+    });
+
+    function selectTask(task) {
+        currentTask = task;
+        localStorage.setItem(`lastViewed_${workspaceId}_${task.id}`, Date.now());
+        displayTasks();
+        mainContentPlaceholder.classList.add('hidden');
+        taskNotesContainer.classList.remove('hidden');
+        taskTitle.textContent = task.name + ' - 作業メモ';
+        
+        if (window.innerWidth < 768) {
+            taskListSidebar.classList.add('-translate-x-full');
+            mainContentArea.classList.remove('translate-x-full');
+        }
+
+        loadNotes(task.id);
+    }
+
+    backToTasksBtn.addEventListener('click', () => {
+        taskListSidebar.classList.remove('-translate-x-full');
+        mainContentArea.classList.add('translate-x-full');
+    });
+
+    function loadNotes(taskId) {
+        if (unsubscribeNotes) unsubscribeNotes();
+        notesList.innerHTML = '<div class="text-center p-4">読み込み中...</div>';
+        const notesQuery = query(collection(db, "workspaces", workspaceId, "tasks", taskId, "notes"), orderBy("createdAt", "asc"));
+        unsubscribeNotes = onSnapshot(notesQuery, (snapshot) => {
+            const notesMap = new Map();
+            const parentNotes = [];
+            snapshot.docs.forEach(doc => notesMap.set(doc.id, { id: doc.id, ...doc.data(), replies: [] }));
+            for (const note of notesMap.values()) {
+                if (note.parentId && notesMap.has(note.parentId)) {
+                    notesMap.get(note.parentId).replies.push(note);
+                } else {
+                    parentNotes.push(note);
+                }
+            }
+            parentNotes.sort((a, b) => {
+                const aTime = a.createdAt ? a.createdAt.toMillis() : 0;
+                const bTime = b.createdAt ? b.createdAt.toMillis() : 0;
+                return (a.isHighlighted ? -1 : 1) - (b.isHighlighted ? -1 : 1) || (a.status === '完了' ? 1 : 0) - (b.status === '完了' ? 1 : 0) || bTime - aTime;
+            });
+            displayNotes(parentNotes);
+        });
+    }
+
+    function displayNotes(parentNotes) {
+        notesList.innerHTML = '';
+        if (parentNotes.length === 0) {
+            notesList.innerHTML = '<div class="text-center p-4">まだメモがありません。</div>';
+            return;
+        }
+        parentNotes.forEach(note => {
+            const noteThreadContainer = document.createElement('div');
+            noteThreadContainer.className = `note-thread ${note.status === '完了' ? 'opacity-50' : ''} ${note.isHighlighted ? 'highlighted' : ''}`;
+            noteThreadContainer.appendChild(createParentNoteElement(note));
+            note.replies.forEach(reply => noteThreadContainer.appendChild(createCommentElement(reply)));
+            noteThreadContainer.appendChild(createCommentFormElement(note.id));
+            notesList.appendChild(noteThreadContainer);
+        });
+    }
+
+    function createParentNoteElement(note) {
+        const noteContainer = document.createElement('div');
+        noteContainer.id = `note-${note.id}`;
+        const timestamp = note.createdAt ? note.createdAt.toDate().toLocaleString('ja-JP') : '';
+        const attachmentsHtml = (note.attachments || []).map(file => `
+            <a href="${file.url}" target="_blank" class="attachment-link"><i class="fas fa-file-alt mr-1"></i>${escapeHtml(file.name)}</a>
+        `).join('');
+        const highlightClass = note.isHighlighted ? 'text-yellow-500' : 'text-gray-400';
+
+        noteContainer.innerHTML = `
+            <div class="flex items-start space-x-3">
+                <div class="status-icon pt-1">${getStatusIcon(note.status)}</div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-gray-800 whitespace-pre-wrap note-content">${escapeHtml(note.content)}</p>
+                    <div>${attachmentsHtml}</div>
+                    <div class="flex items-center justify-between text-xs text-gray-500 mt-2 pt-2 border-t">
+                        <span>by: ${escapeHtml(note.author)}</span><span>${timestamp}</span>
+                    </div>
+                </div>
+                <div class="flex flex-col items-end space-y-2">
+                    <select class="status-changer border rounded text-xs p-1" data-note-id="${note.id}">
+                        <option value="作業中" ${note.status === '作業中' ? 'selected' : ''}>作業中</option>
+                        <option value="要確認" ${note.status === '要確認' ? 'selected' : ''}>要確認</option>
+                        <option value="完了" ${note.status === '完了' ? 'selected' : ''}>完了</option>
+                    </select>
+                    <div class="note-actions flex items-center space-x-2">
+                        <button class="highlight-btn ${highlightClass} hover:text-yellow-500" data-note-id="${note.id}" title="注目"><i class="fas fa-star"></i></button>
+                        ${createButtonHtml('edit-btn', 'fa-pencil-alt', note.id)}
+                        ${createButtonHtml('delete-btn', 'fa-trash-alt', note.id)}
+                    </div>
+                </div>
+            </div>`;
+        return noteContainer;
+    }
+    
+    function createCommentElement(comment) {
+        const div = document.createElement('div');
+        div.id = `note-${comment.id}`;
+        div.className = 'comment-item p-3 bg-white rounded-xl text-sm';
+        const timestamp = comment.createdAt ? comment.createdAt.toDate().toLocaleString('ja-JP') : '';
+        const attachmentsHtml = (comment.attachments || []).map(file => `
+            <a href="${file.url}" target="_blank" class="attachment-link"><i class="fas fa-file-alt mr-1"></i>${escapeHtml(file.name)}</a>
+        `).join('');
+        div.innerHTML = `
+            <div class="flex items-start space-x-3">
+                <div class="pt-1"><i class="fas fa-comment-dots text-gray-400"></i></div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-gray-700 whitespace-pre-wrap note-content">${escapeHtml(comment.content)}</p>
+                    <div>${attachmentsHtml}</div>
+                    <div class="flex items-center justify-between text-xs text-gray-500 mt-2 pt-2 border-t border-dashed">
+                        <span>by: ${escapeHtml(comment.author)}</span><span>${timestamp}</span>
+                    </div>
+                </div>
+                <div class="note-actions space-x-2">${createButtonHtml('edit-btn', 'fa-pencil-alt', comment.id)}${createButtonHtml('delete-btn', 'fa-trash-alt', comment.id)}</div>
+            </div>`;
+        return div;
+    }
+
+    function createCommentFormElement(parentId) {
+        const div = document.createElement('div');
+        div.className = 'comment-form-container';
+        div.innerHTML = `
+            <form class="comment-form" data-parent-id="${parentId}">
+                <div class="relative">
+                    <input type="text" class="comment-input w-full border rounded px-2 py-1 text-sm" placeholder="追加コメント...">
+                    <button type="button" class="quick-reply-btn absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded hover:bg-gray-300">了解です</button>
+                </div>
+                <div class="comment-attachments-preview mt-2 text-xs"></div>
+                <div class="flex items-center justify-end space-x-2 mt-2">
+                    <label class="cursor-pointer text-gray-500 hover:text-blue-500"><i class="fas fa-paperclip"></i>
+                        <input type="file" class="comment-file-input hidden" multiple>
+                    </label>
+                    <button type="submit" class="px-3 py-1 text-white bg-gray-500 rounded hover:bg-gray-600 text-sm">送信</button>
+                </div>
+            </form>`;
+        return div;
+    }
+
+const createButtonHtml = (className, icon, noteId) => `<button class="${className}" data-note-id="${noteId}" title="${className === 'edit-btn' ? '編集' : '削除'}"><i class="fas ${icon}"></i></button>`;
+    
+    async function updateTaskTimestamp(taskId) {
+        const taskRef = doc(tasksCollectionRef, taskId);
+        await updateDoc(taskRef, { lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
+        await updateDoc(workspaceRef, { lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
+    }
+
+    addTaskForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const input = document.getElementById('new-task-name');
+        const name = input.value.trim();
+        if (!name) return;
+        await addDoc(tasksCollectionRef, { name, createdAt: serverTimestamp(), lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid, archived: false });
+        await updateDoc(workspaceRef, { lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
+        input.value = '';
+    });
+
+    noteFileInput.addEventListener('change', (e) => {
+        noteFiles = Array.from(e.target.files);
+        noteAttachmentsPreview.innerHTML = noteFiles.map(f => `<span>${escapeHtml(f.name)}</span>`).join(', ');
+    });
+    notesList.addEventListener('change', (e) => {
+        if (e.target.classList.contains('comment-file-input')) {
+            const form = e.target.closest('form');
+            const parentId = form.dataset.parentId;
+            commentFiles[parentId] = Array.from(e.target.files);
+            const preview = form.querySelector('.comment-attachments-preview');
+            preview.innerHTML = commentFiles[parentId].map(f => `<span>${escapeHtml(f.name)}</span>`).join(', ');
+        }
+    });
+
+    async function uploadFiles(files, taskId) {
+        const uploadPromises = files.map(file => {
+            const storageRef = ref(storage, `${workspaceId}/${taskId}/${Date.now()}_${file.name}`);
+            return uploadBytes(storageRef, file).then(snapshot => getDownloadURL(snapshot.ref));
+        });
+        const urls = await Promise.all(uploadPromises);
+        return files.map((file, index) => ({ name: file.name, url: urls[index] }));
+    }
+
+    noteForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const author = authorInput.value.trim();
+        const content = document.getElementById('note-textarea').value.trim();
+        if (!currentTask || (!content && noteFiles.length === 0) || !author) {
+            showMessage('投稿者名と内容を入力してください。', true);
+            return;
+        }
+        
+        const attachments = noteFiles.length > 0 ? await uploadFiles(noteFiles, currentTask.id) : [];
+        
+        const notesCollectionRef = collection(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes");
+        await addDoc(notesCollectionRef, {
+            author, content, attachments,
+            status: document.getElementById('status-select').value,
+            parentId: null,
+            createdAt: serverTimestamp(),
+            isHighlighted: false
+        });
+        await updateTaskTimestamp(currentTask.id);
+        
+        document.getElementById('note-textarea').value = '';
+        noteFiles = [];
+        noteAttachmentsPreview.innerHTML = '';
+        noteFileInput.value = '';
+    });
+
+    notesList.addEventListener('submit', async (e) => {
+        if (e.target.classList.contains('comment-form')) {
+            e.preventDefault();
+            const form = e.target;
+            const parentId = form.dataset.parentId;
+            const author = authorInput.value.trim();
+            const content = form.querySelector('.comment-input').value.trim();
+            const files = commentFiles[parentId] || [];
+
+            if (!currentTask || (!content && files.length === 0) || !author) {
+                showMessage('投稿者名と内容を入力してください。', true);
+                return;
+            }
+
+            const attachments = files.length > 0 ? await uploadFiles(files, currentTask.id) : [];
+            
+            const notesCollectionRef = collection(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes");
+            await addDoc(notesCollectionRef, {
+                author, content, attachments, parentId, status: '', createdAt: serverTimestamp()
+            });
+            await updateTaskTimestamp(currentTask.id);
+
+            form.reset();
+            commentFiles[parentId] = [];
+            form.querySelector('.comment-attachments-preview').innerHTML = '';
+        }
+    });
+    
+    notesList.addEventListener('click', async (e) => {
+        const editBtn = e.target.closest('.edit-btn');
+        const deleteBtn = e.target.closest('.delete-btn');
+        const statusChanger = e.target.closest('.status-changer');
+        const highlightBtn = e.target.closest('.highlight-btn');
+        const quickReplyBtn = e.target.closest('.quick-reply-btn');
+
+        if(quickReplyBtn) {
+            const form = quickReplyBtn.closest('form');
+            form.querySelector('.comment-input').value = '了解です';
+            form.querySelector('button[type="submit"]').click();
+        }
+
+        if (highlightBtn) {
+            const noteId = highlightBtn.dataset.noteId;
+            const noteRef = doc(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes", noteId);
+            const docSnap = await getDoc(noteRef);
+            if (docSnap.exists()) {
+                await updateDoc(noteRef, { isHighlighted: !docSnap.data().isHighlighted });
+            }
+        }
+
+        if (editBtn) {
+            const noteId = editBtn.dataset.noteId;
+            const noteElement = document.getElementById(`note-${noteId}`);
+            const contentP = noteElement.querySelector('.note-content');
+            
+            if (noteElement.querySelector('.edit-area')) return;
+
+            const currentContent = contentP.innerText;
+            contentP.style.display = 'none';
+
+            const editArea = document.createElement('div');
+            editArea.className = 'edit-area mt-2';
+            editArea.innerHTML = `
+                <textarea class="w-full border rounded p-2 text-sm">${currentContent}</textarea>
+                <div class="text-right mt-2 space-x-2">
+                    <button class="save-edit-btn px-3 py-1 bg-blue-500 text-white rounded text-xs">保存</button>
+                    <button class="cancel-edit-btn px-3 py-1 bg-gray-300 rounded text-xs">キャンセル</button>
+                </div>
+            `;
+            contentP.after(editArea);
+            
+            editArea.querySelector('.save-edit-btn').onclick = async () => {
+                const newContent = editArea.querySelector('textarea').value;
+                if (newContent.trim() !== '') {
+                    const noteRef = doc(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes", noteId);
+                    await updateDoc(noteRef, { content: newContent.trim() });
+                    await updateTaskTimestamp(currentTask.id);
+                }
+                editArea.remove();
+                contentP.style.display = '';
+            };
+
+            editArea.querySelector('.cancel-edit-btn').onclick = () => {
+                editArea.remove();
+                contentP.style.display = '';
+            };
+        }
+
+        if (deleteBtn) {
+            const noteId = deleteBtn.dataset.noteId;
+            if (confirm('このメモ（と返信）を削除しますか？')) {
+                const noteRef = doc(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes", noteId);
+                await deleteDoc(noteRef);
+                await updateTaskTimestamp(currentTask.id);
+            }
+        }
+
+        if (statusChanger) {
+            const noteId = statusChanger.dataset.noteId;
+            const newStatus = statusChanger.value;
+            const noteRef = doc(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes", noteId);
+            await updateDoc(noteRef, { status: newStatus });
+            await updateTaskTimestamp(currentTask.id);
+        }
+    });
+
+  }
+</script>
+</body>
+</html>
+
