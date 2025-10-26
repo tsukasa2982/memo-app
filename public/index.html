@@ -159,598 +159,829 @@
 
 <!-- Firebase SDK -->
 <script type="module">
-  // Firebase SDKsをインポート
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { getFirestore, collection, addDoc, doc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, query, orderBy, writeBatch, getDocs, getDoc, where, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-  import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+  // Firebase SDKsをインポート
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getFirestore, collection, addDoc, doc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, query, orderBy, writeBatch, getDocs, getDoc, where, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
-  // あなたのFirebaseプロジェクトの設定情報
-  const firebaseConfig = {
-    apiKey: "AIzaSyBoPbky1S2z99_pHec1pyV3kFaXWVDOK9A",
-    authDomain: "visionapiproject-445610.firebaseapp.com",
-    projectId: "visionapiproject-445610",
-    storageBucket: "visionapiproject-445610.firebasestorage.app",
-    messagingSenderId: "467175218532",
-    appId: "1:467175218532:web:1aa10f7f01ad788232ae71",
-    measurementId: "G-NNWVP7HH14"
-  };
+  // あなたのFirebaseプロジェクトの設定情報
+  const firebaseConfig = {
+    apiKey: "AIzaSyBoPbky1S2z99_pHec1pyV3kFaXWVDOK9A",
+    authDomain: "visionapiproject-445610.firebaseapp.com",
+    projectId: "visionapiproject-445610",
+    storageBucket: "visionapiproject-445610.firebasestorage.app",
+    messagingSenderId: "467175218532",
+    appId: "1:467175218532:web:1aa10f7f01ad788232ae71",
+    measurementId: "G-NNWVP7HH14"
+  };
 
-  // Firebaseアプリを初期化
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-  const storage = getStorage(app);
+  // (D) escapeHtml をグローバルスコープに移動
+  const escapeHtml = str => { if(typeof str !== 'string')return''; const div=document.createElement('div'); div.textContent=str; return div.innerHTML; };
 
-  const params = new URLSearchParams(window.location.search);
-  const workspaceId = params.get('workspace');
-  const isAdmin = params.get('admin') === 'true';
-  let currentUser = null;
+  // Firebaseアプリを初期化
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const storage = getStorage(app);
 
-  const appMessage = document.getElementById('app-message');
-  function showMessage(message, isError = false) {
-      appMessage.textContent = message;
-      appMessage.className = '';
-      if (isError) appMessage.classList.add('error');
-      appMessage.style.display = 'block';
-      appMessage.style.opacity = 1;
-      setTimeout(() => {
-          appMessage.style.opacity = 0;
-          setTimeout(() => { appMessage.style.display = 'none'; }, 500);
-      }, 3000);
-  }
-  
-  onAuthStateChanged(auth, user => {
-    currentUser = user;
-    const appContainer = document.getElementById('app-container');
-    const workspaceSelector = document.getElementById('workspace-selector');
+  const params = new URLSearchParams(window.location.search);
+  const workspaceId = params.get('workspace');
+  const isAdmin = params.get('admin') === 'true';
+  let currentUser = null;
 
-    if (user) {
-      if (workspaceId) {
-        workspaceSelector.style.display = 'none';
-        appContainer.style.display = 'flex';
-        initializeAppLogic(user, workspaceId);
-      } else if (isAdmin) {
-        appContainer.style.display = 'none';
-        workspaceSelector.style.display = 'flex';
-        displayWorkspaceSelector(user);
-      } else {
-        document.body.innerHTML = `
-          <div class="flex flex-col items-center justify-center h-screen bg-pink-50 text-gray-700 text-center p-4">
-            <i class="fas fa-user-secret fa-6x text-pink-300 mb-6 animate-bounce"></i>
-            <h1 class="text-5xl font-bold text-pink-500 mb-4">だめっ…！</h1>
-            <p class="text-xl">そこは開けちゃダメな扉です…！</p>
-            <div class="mt-8 text-left bg-white p-6 rounded-lg shadow-md max-w-md">
-                <p class="text-lg">ここは、管理者とクライアント様だけの、<br>とってもデリケートな情報が詰まった秘密の場所なんです。</p>
-                <p class="mt-4 text-gray-600">興味本位でURLを操作してここに辿り着いてしまったのだと思いますが、<br>中を覗くのは、どうかご遠慮くださいね…恥ずかしいので…。</p>
-                <p class="mt-6 text-sm text-pink-400 font-semibold">(もし招待されたご本人様でしたら、お渡しした正しいURLからアクセスをお願いしますね 🤫)</p>
-            </div>
-          </div>
-        `;
-      }
-    } else {
-      signInAnonymously(auth).catch(error => {
-        console.error("Anonymous sign-in failed:", error);
-        document.body.innerHTML = `<div class="flex items-center justify-center h-screen"><div class="text-center p-8 bg-white rounded-lg shadow-lg"><h1 class="text-2xl font-bold text-red-600 mb-4">認証エラー</h1><p>Firebaseへの接続に失敗しました。ページを再読み込みしてください。</p></div></div>`;
-      });
+  // (B) 同時編集対応フラグと保留スナップショット
+  let isEditingSomething = false;
+  let pendingNotesSnapshot = null;
+  
+  // (A) 未読監視用のObserver
+  let intersectionObserver = null;
+
+  const appMessage = document.getElementById('app-message');
+  function showMessage(message, isError = false) {
+      appMessage.textContent = message;
+      appMessage.className = '';
+      if (isError) appMessage.classList.add('error');
+      appMessage.style.display = 'block';
+      appMessage.style.opacity = 1;
+      setTimeout(() => {
+          appMessage.style.opacity = 0;
+          setTimeout(() => { appMessage.style.display = 'none'; }, 500);
+      }, 3000);
+  }
+  
+  onAuthStateChanged(auth, user => {
+    currentUser = user;
+    const appContainer = document.getElementById('app-container');
+    const workspaceSelector = document.getElementById('workspace-selector');
+
+    if (user) {
+      if (workspaceId) {
+        workspaceSelector.style.display = 'none';
+        appContainer.style.display = 'flex';
+        initializeAppLogic(user, workspaceId);
+      } else if (isAdmin) {
+        appContainer.style.display = 'none';
+        workspaceSelector.style.display = 'flex';
+        displayWorkspaceSelector(user);
+      } else {
+        document.body.innerHTML = `
+          <div class="flex flex-col items-center justify-center h-screen bg-pink-50 text-gray-700 text-center p-4">
+            <i class="fas fa-user-secret fa-6x text-pink-300 mb-6 animate-bounce"></i>
+            <h1 class="text-5xl font-bold text-pink-500 mb-4">だめっ…！</h1>
+            <p class="text-xl">そこは開けちゃダメな扉です…！</p>
+            <div class="mt-8 text-left bg-white p-6 rounded-lg shadow-md max-w-md">
+                <p class="text-lg">ここは、管理者とクライアント様だけの、<br>とってもデリケートな情報が詰まった秘密の場所なんです。</p>
+                <p class="mt-4 text-gray-600">興味本位でURLを操作してここに辿り着いてしまったのだと思いますが、<br>中を覗くのは、どうかご遠慮くださいね…恥ずかしいので…。</p>
+                <p class="mt-6 text-sm text-pink-400 font-semibold">(もし招待されたご本人様でしたら、お渡しした正しいURLからアクセスをお願いしますね 🤫)</p>
+            </div>
+          </div>
+        `;
+      }
+    } else {
+      signInAnonymously(auth).catch(error => {
+        console.error("Anonymous sign-in failed:", error);
+        document.body.innerHTML = `<div class="flex items-center justify-center h-screen"><div class="text-center p-8 bg-white rounded-lg shadow-lg"><h1 class="text-2xl font-bold text-red-600 mb-4">認証エラー</h1><p>Firebaseへの接続に失敗しました。ページを再読み込みしてください。</p></div></div>`;
+      });
+    }
+  });
+
+  // --- ワークスペース管理機能 ---
+  async function displayWorkspaceSelector(user) {
+    const listElement = document.getElementById('workspace-list');
+    const addWorkspaceForm = document.getElementById('add-workspace-form');
+    
+    onSnapshot(query(collection(db, "workspaces"), orderBy("name")), (querySnapshot) => {
+      listElement.innerHTML = '';
+      if (querySnapshot.empty) {
+        listElement.innerHTML = '<p class="text-center text-gray-500">ワークスペースがありません。</p>';
+        return;
+      }
+      querySnapshot.forEach((doc) => {
+        const workspace = { id: doc.id, ...doc.data() };
+        const div = document.createElement('div');
+        div.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-lg';
+        
+        // (A) ワークスペースの未読ロジック
+        const lastViewed = localStorage.getItem(`lastViewed_workspace_${workspace.id}`) || 0;
+        const lastUpdatedMillis = workspace.lastUpdated ? workspace.lastUpdated.toMillis() : 0;
+        const isUnread = lastUpdatedMillis > lastViewed && workspace.lastUpdatedBy !== user.uid;
+        const indicatorHtml = isUnread ? `<span class="text-red-500 ml-2 unread-indicator">●</span>` : '';
+
+        // (D) escapeHtml を使用
+        div.innerHTML = `
+          <div>
+            <a href="?workspace=${workspace.id}" class="workspace-link font-semibold text-blue-600 hover:underline flex items-center" data-id="${workspace.id}">
+              ${escapeHtml(workspace.name)} ${indicatorHtml}
+            </a>
+            <p class="text-xs text-gray-500">ID: ${escapeHtml(workspace.id)}</p>
+          </div>
+          <div class="space-x-2">
+            <button class="edit-workspace-btn text-gray-400 hover:text-green-500" data-id="${workspace.id}" data-name="${workspace.name}"><i class="fas fa-pencil-alt"></i></button>
+            <button class="delete-workspace-btn text-gray-400 hover:text-red-500" data-id="${workspace.id}" data-name="${workspace.name}"><i class="fas fa-trash-alt"></i></button>
+          </div>
+        `;
+        listElement.appendChild(div);
+      });
+    }, (error) => {
+      console.error("Error loading workspaces: ", error);
+      listElement.innerHTML = '<p class="text-center text-red-500">ワークスペースの読み込みに失敗しました。</p>';
+    });
+
+    addWorkspaceForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const nameInput = document.getElementById('new-workspace-name');
+      const idInput = document.getElementById('new-workspace-id');
+      const name = nameInput.value.trim();
+      const id = idInput.value.trim().replace(/\s+/g, '-');
+      if (!name || !id) return;
+      
+      try {
+        // (A) ワークスペース作成時にもタイムスタンプ保存
+        await setDoc(doc(db, "workspaces", id), { name: name, lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
+        nameInput.value = '';
+        idInput.value = '';
+        showMessage('ワークスペースを追加しました。');
+      } catch (error) {
+        console.error("Error adding workspace:", error);
+        showMessage('ワークスペースの追加に失敗しました。', true);
+      }
+    });
+
+    listElement.addEventListener('click', async (e) => {
+      const editBtn = e.target.closest('.edit-workspace-btn');
+      const deleteBtn = e.target.closest('.delete-workspace-btn');
+      const workspaceLink = e.target.closest('.workspace-link');
+      
+      if (workspaceLink) {
+        // (A) ワークスペース既読化
+        const id = workspaceLink.dataset.id;
+        localStorage.setItem(`lastViewed_workspace_${id}`, Date.now());
+      }
+      
+      if (editBtn) {
+        e.stopPropagation();
+        const id = editBtn.dataset.id;
+        const currentName = editBtn.dataset.name;
+        const newName = prompt("新しいワークスペース名を入力してください:", currentName);
+        if (newName && newName.trim() !== '') {
+          // (A) 編集時にもタイムスタンプ更新
+          await updateDoc(doc(db, "workspaces", id), { name: newName.trim(), lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
+        }
+      }
+      
+      if (deleteBtn) {
+        e.stopPropagation();
+        const id = deleteBtn.dataset.id;
+        const name = deleteBtn.dataset.name;
+        if (confirm(`ワークスペース「${name}」を削除しますか？\nこの操作は元に戻せません。`)) {
+          await deleteDoc(doc(db, "workspaces", id));
+        }
+      }
+    });
+  }
+
+  // --- メインのメモアプリロジック ---
+  async function initializeAppLogic(user, workspaceId) {
+    let currentTask = null;
+    let unsubscribeNotes = null;
+    let allTasks = [];
+    let showArchived = false;
+    let noteFiles = [];
+    let commentFiles = {};
+
+    const authorInput = document.getElementById('author-input');
+    const taskListSidebar = document.getElementById('task-list-sidebar');
+    const mainContentArea = document.getElementById('main-content-area');
+    const taskButtonsContainer = document.getElementById('task-buttons-container');
+    const mainContentPlaceholder = document.getElementById('main-content-placeholder');
+    const taskNotesContainer = document.getElementById('task-notes-container');
+    const taskTitle = document.getElementById('task-title');
+    const notesList = document.getElementById('notes-list');
+    const noteForm = document.getElementById('note-form');
+    const addTaskForm = document.getElementById('add-task-form');
+    const toggleArchiveBtn = document.getElementById('toggle-archive-btn');
+    const noteFileInput = document.getElementById('note-file-input');
+    const noteAttachmentsPreview = document.getElementById('note-attachments-preview');
+    const backToTasksBtn = document.getElementById('back-to-tasks-btn');
+    const homeLink = document.getElementById('home-link');
+
+    if (!isAdmin) {
+      homeLink.style.display = 'none';
+    }
+
+    const workspaceRef = doc(db, "workspaces", workspaceId);
+    try {
+        const workspaceDoc = await getDoc(workspaceRef);
+        if (workspaceDoc.exists()) {
+            document.getElementById('workspace-title').textContent = workspaceDoc.data().name;
+        } else {
+            document.getElementById('workspace-title').textContent = `${workspaceId} (不明)`;
+        }
+    } catch {
+        document.getElementById('workspace-title').textContent = `${workspaceId} (エラー)`;
+    }
+
+    authorInput.value = localStorage.getItem('memoAuthor') || '';
+    authorInput.addEventListener('change', () => localStorage.setItem('memoAuthor', authorInput.value));
+    
+    // (D) escapeHtmlはグローバルに移動済み
+    const getStatusIcon = status => { switch (status) { case '作業中': return '<i class="fas fa-cogs text-blue-500"></i>'; case '要確認': return '<i class="fas fa-exclamation-triangle text-yellow-500"></i>'; case '完了': return '<i class="fas fa-check-circle text-green-500"></i>'; default: return ''; } };
+
+    const tasksCollectionRef = collection(db, "workspaces", workspaceId, "tasks");
+    
+    onSnapshot(query(tasksCollectionRef, orderBy("createdAt", "desc")), (snapshot) => {
+        allTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        displayTasks();
+    });
+
+    toggleArchiveBtn.addEventListener('click', () => {
+        showArchived = !showArchived;
+        toggleArchiveBtn.textContent = showArchived ? '通常表示' : 'アーカイブ表示';
+        displayTasks();
+    });
+
+    // (B) 編集状態管理と保留スナップショット処理
+    function setEditingStatus(isEditing) {
+        isEditingSomething = isEditing;
+        
+        // 編集が終了し、保留中のスナップショットがある場合
+        if (!isEditing && pendingNotesSnapshot) {
+            console.log("Applying pending snapshot...");
+            handleNotesSnapshot(pendingNotesSnapshot);
+            pendingNotesSnapshot = null;
+        }
+    }
+
+    function displayTasks() {
+        const tasksToDisplay = allTasks.filter(task => showArchived ? task.archived : !task.archived);
+        taskButtonsContainer.innerHTML = '';
+        if (tasksToDisplay.length === 0) {
+            taskButtonsContainer.innerHTML = `<p class="text-xs text-gray-500 p-2">${showArchived ? 'アーカイブされた作業はありません。' : '作業内容を追加してください。'}</p>`;
+            return;
+        }
+        tasksToDisplay.forEach(task => taskButtonsContainer.appendChild(createTaskButton(task)));
+    }
+
+    function createTaskButton(task) {
+        const button = document.createElement('div');
+        button.className = 'task-button w-full text-left p-2 text-sm rounded-lg hover:bg-gray-100 cursor-pointer';
+        if (currentTask && currentTask.id === task.id) button.classList.add('bg-blue-100', 'text-blue-800', 'font-semibold');
+        
+        // (A) タスクの未読ロジック
+        const lastViewed = localStorage.getItem(`lastViewed_${workspaceId}_${task.id}`) || 0;
+        const lastUpdatedMillis = task.lastUpdated ? task.lastUpdated.toMillis() : (task.createdAt ? task.createdAt.toMillis() : 0);
+        const isUnread = lastUpdatedMillis > lastViewed && task.lastUpdatedBy !== user.uid;
+        const indicatorHtml = isUnread ? `<span class="text-red-500 ml-2 unread-indicator">●</span>` : '';
+
+       button.innerHTML = `
+        <span class="flex items-center">${escapeHtml(task.name)} ${indicatorHtml}</span>
+
+        <div class="task-button-actions">
+            <button title="${task.archived ? 'アーカイブ解除' : 'アーカイブ'}" class="archive-task-btn text-gray-400 hover:text-yellow-500 mr-2" data-id="${task.id}" data-archived="${task.archived || false}"><i class="fas fa-archive"></i></button>
+            <button title="削除" class="delete-task-btn text-gray-400 hover:text-red-500" data-id="${task.id}" data-name="${task.name}"><i class="fas fa-trash-alt"></i></button>
+        </div>
+    `;
+        button.onclick = (e) => {
+            if (!e.target.closest('button')) selectTask(task);
+        };
+        return button;
+    }
+
+    taskButtonsContainer.addEventListener('click', async (e) => {
+        const archiveBtn = e.target.closest('.archive-task-btn');
+        const deleteBtn = e.target.closest('.delete-task-btn');
+        if (archiveBtn) {
+            const id = archiveBtn.dataset.id;
+            const isArchived = archiveBtn.dataset.archived === 'true';
+            // (A) アーカイブ時もタイムスタンプ更新
+            await updateDoc(doc(tasksCollectionRef, id), { 
+                archived: !isArchived, 
+                lastUpdated: serverTimestamp(), 
+                lastUpdatedBy: user.uid 
+            });
+            // (E) ワークスペースのタイムスタンプも更新
+            await updateDoc(workspaceRef, { lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
+        }
+        if (deleteBtn) {
+            const id = deleteBtn.dataset.id;
+            const name = deleteBtn.dataset.name;
+            if (confirm(`作業内容「${name}」を削除しますか？`)) {
+                await deleteDoc(doc(tasksCollectionRef, id));
+                // (E) ワークスペースのタイムスタンプも更新
+                await updateDoc(workspaceRef, { lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
+            }
+        }
+    });
+
+    function selectTask(task) {
+        currentTask = task;
+        // (A) タスク既読化
+        localStorage.setItem(`lastViewed_${workspaceId}_${task.id}`, Date.now());
+        displayTasks();
+        mainContentPlaceholder.classList.add('hidden');
+        taskNotesContainer.classList.remove('hidden');
+        taskTitle.textContent = task.name + ' - 作業メモ';
+        
+        if (window.innerWidth < 768) {
+            taskListSidebar.classList.add('-translate-x-full');
+            mainContentArea.classList.remove('translate-x-full');
+        }
+
+        loadNotes(task.id);
+    }
+
+    backToTasksBtn.addEventListener('click', () => {
+        taskListSidebar.classList.remove('-translate-x-full');
+        mainContentArea.classList.add('translate-x-full');
+    });
+
+    // (B) スナップショット処理を別関数に分離
+    function handleNotesSnapshot(snapshot) {
+        const notesMap = new Map();
+        const parentNotes = [];
+        snapshot.docs.forEach(doc => notesMap.set(doc.id, { id: doc.id, ...doc.data(), replies: [] }));
+        for (const note of notesMap.values()) {
+            if (note.parentId && notesMap.has(note.parentId)) {
+                notesMap.get(note.parentId).replies.push(note);
+            } else {
+                parentNotes.push(note);
+            }
+        }
+        parentNotes.sort((a, b) => {
+            // (A) ソートキーに lastUpdatedAt を追加 (ない場合は createdAt)
+            const aTime = (a.lastUpdatedAt || a.createdAt)?.toMillis() || 0;
+            const bTime = (b.lastUpdatedAt || b.createdAt)?.toMillis() || 0;
+            return (a.isHighlighted ? -1 : 1) - (b.isHighlighted ? -1 : 1) || (a.status === '完了' ? 1 : 0) - (b.status === '完了' ? 1 : 0) || bTime - aTime;
+        });
+        displayNotes(parentNotes);
+    }
+
+    function loadNotes(taskId) {
+        if (unsubscribeNotes) unsubscribeNotes();
+        notesList.innerHTML = '<div class="text-center p-4">読み込み中...</div>';
+        const notesQuery = query(collection(db, "workspaces", workspaceId, "tasks", taskId, "notes"), orderBy("createdAt", "asc"));
+        
+        unsubscribeNotes = onSnapshot(notesQuery, (snapshot) => {
+            // (B) 編集中はスナップショットを保留
+            if (isEditingSomething) {
+                console.log("Pending snapshot while editing...");
+                pendingNotesSnapshot = snapshot;
+                return;
+            }
+            // (B) 通常時はスナップショット処理を呼び出す
+            handleNotesSnapshot(snapshot);
+        });
+    }
+
+    // (A) 未読監視 (IntersectionObserver)
+function observeVisibleNotes() {
+    if (intersectionObserver) {
+        intersectionObserver.disconnect();
     }
-  });
 
-  // --- ワークスペース管理機能 ---
-  async function displayWorkspaceSelector(user) {
-    const listElement = document.getElementById('workspace-list');
-    const addWorkspaceForm = document.getElementById('add-workspace-form');
-    
-    onSnapshot(query(collection(db, "workspaces"), orderBy("name")), (querySnapshot) => {
-      listElement.innerHTML = '';
-      if (querySnapshot.empty) {
-        listElement.innerHTML = '<p class="text-center text-gray-500">ワークスペースがありません。</p>';
-        return;
-      }
-      querySnapshot.forEach((doc) => {
-        const workspace = { id: doc.id, ...doc.data() };
-        const div = document.createElement('div');
-        div.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-lg';
-        
-        const lastViewed = localStorage.getItem(`lastViewed_workspace_${workspace.id}`) || 0;
-        const lastUpdatedMillis = workspace.lastUpdated ? workspace.lastUpdated.toMillis() : 0;
-        const isUnread = lastUpdatedMillis > lastViewed && workspace.lastUpdatedBy !== user.uid;
-        const indicatorHtml = isUnread ? `<span class="text-red-500 ml-2">●</span>` : '';
+    intersectionObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const noteElement = entry.target;
+                const noteId = noteElement.dataset.noteId;
+                const updatedAt = noteElement.dataset.updatedAt;
 
-        div.innerHTML = `
-          <div>
-            <a href="?workspace=${workspace.id}" class="workspace-link font-semibold text-blue-600 hover:underline flex items-center" data-id="${workspace.id}">
-              ${workspace.name} ${indicatorHtml}
-            </a>
-            <p class="text-xs text-gray-500">ID: ${workspace.id}</p>
-          </div>
-          <div class="space-x-2">
-            <button class="edit-workspace-btn text-gray-400 hover:text-green-500" data-id="${workspace.id}" data-name="${workspace.name}"><i class="fas fa-pencil-alt"></i></button>
-            <button class="delete-workspace-btn text-gray-400 hover:text-red-500" data-id="${workspace.id}" data-name="${workspace.name}"><i class="fas fa-trash-alt"></i></button>
-          </div>
-        `;
-        listElement.appendChild(div);
-      });
-    }, (error) => {
-      console.error("Error loading workspaces: ", error);
-      listElement.innerHTML = '<p class="text-center text-red-500">ワークスペースの読み込みに失敗しました。</p>';
-    });
-
-    addWorkspaceForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const nameInput = document.getElementById('new-workspace-name');
-      const idInput = document.getElementById('new-workspace-id');
-      const name = nameInput.value.trim();
-      const id = idInput.value.trim().replace(/\s+/g, '-');
-      if (!name || !id) return;
-      
-      try {
-        await setDoc(doc(db, "workspaces", id), { name: name, lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
-        nameInput.value = '';
-        idInput.value = '';
-        showMessage('ワークスペースを追加しました。');
-      } catch (error) {
-        console.error("Error adding workspace:", error);
-        showMessage('ワークスペースの追加に失敗しました。', true);
-      }
-    });
-
-    listElement.addEventListener('click', async (e) => {
-      const editBtn = e.target.closest('.edit-workspace-btn');
-      const deleteBtn = e.target.closest('.delete-workspace-btn');
-      const workspaceLink = e.target.closest('.workspace-link');
-      
-      if (workspaceLink) {
-        const id = workspaceLink.dataset.id;
-        localStorage.setItem(`lastViewed_workspace_${id}`, Date.now());
-      }
-      
-      if (editBtn) {
-        e.stopPropagation();
-        const id = editBtn.dataset.id;
-        const currentName = editBtn.dataset.name;
-        const newName = prompt("新しいワークスペース名を入力してください:", currentName);
-        if (newName && newName.trim() !== '') {
-          await updateDoc(doc(db, "workspaces", id), { name: newName.trim() });
-        }
-      }
-      
-      if (deleteBtn) {
-        e.stopPropagation();
-        const id = deleteBtn.dataset.id;
-        const name = deleteBtn.dataset.name;
-        if (confirm(`ワークスペース「${name}」を削除しますか？\nこの操作は元に戻せません。`)) {
-          await deleteDoc(doc(db, "workspaces", id));
-        }
-      }
-    });
-  }
-
-  // --- メインのメモアプリロジック ---
-  async function initializeAppLogic(user, workspaceId) {
-    let currentTask = null;
-    let unsubscribeNotes = null;
-    let allTasks = [];
-    let showArchived = false;
-    let noteFiles = [];
-    let commentFiles = {};
-
-    const authorInput = document.getElementById('author-input');
-    const taskListSidebar = document.getElementById('task-list-sidebar');
-    const mainContentArea = document.getElementById('main-content-area');
-    const taskButtonsContainer = document.getElementById('task-buttons-container');
-    const mainContentPlaceholder = document.getElementById('main-content-placeholder');
-    const taskNotesContainer = document.getElementById('task-notes-container');
-    const taskTitle = document.getElementById('task-title');
-    const notesList = document.getElementById('notes-list');
-    const noteForm = document.getElementById('note-form');
-    const addTaskForm = document.getElementById('add-task-form');
-    const toggleArchiveBtn = document.getElementById('toggle-archive-btn');
-    const noteFileInput = document.getElementById('note-file-input');
-    const noteAttachmentsPreview = document.getElementById('note-attachments-preview');
-    const backToTasksBtn = document.getElementById('back-to-tasks-btn');
-    const homeLink = document.getElementById('home-link');
-
-    if (!isAdmin) {
-      homeLink.style.display = 'none';
-    }
-
-    const workspaceRef = doc(db, "workspaces", workspaceId);
-    try {
-        const workspaceDoc = await getDoc(workspaceRef);
-        if (workspaceDoc.exists()) {
-            document.getElementById('workspace-title').textContent = workspaceDoc.data().name;
-        } else {
-            document.getElementById('workspace-title').textContent = `${workspaceId} (不明)`;
-        }
-    } catch {
-        document.getElementById('workspace-title').textContent = `${workspaceId} (エラー)`;
-    }
-
-    authorInput.value = localStorage.getItem('memoAuthor') || '';
-    authorInput.addEventListener('change', () => localStorage.setItem('memoAuthor', authorInput.value));
-    
-    const escapeHtml = str => { if(typeof str !== 'string')return''; const div=document.createElement('div'); div.textContent=str; return div.innerHTML; };
-    const getStatusIcon = status => { switch (status) { case '作業中': return '<i class="fas fa-cogs text-blue-500"></i>'; case '要確認': return '<i class="fas fa-exclamation-triangle text-yellow-500"></i>'; case '完了': return '<i class="fas fa-check-circle text-green-500"></i>'; default: return ''; } };
-
-    const tasksCollectionRef = collection(db, "workspaces", workspaceId, "tasks");
-    
-    onSnapshot(query(tasksCollectionRef, orderBy("createdAt", "desc")), (snapshot) => {
-        allTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        displayTasks();
-    });
-
-    toggleArchiveBtn.addEventListener('click', () => {
-        showArchived = !showArchived;
-        toggleArchiveBtn.textContent = showArchived ? '通常表示' : 'アーカイブ表示';
-        displayTasks();
-    });
-
-    function displayTasks() {
-        const tasksToDisplay = allTasks.filter(task => showArchived ? task.archived : !task.archived);
-        taskButtonsContainer.innerHTML = '';
-        if (tasksToDisplay.length === 0) {
-            taskButtonsContainer.innerHTML = `<p class="text-xs text-gray-500 p-2">${showArchived ? 'アーカイブされた作業はありません。' : '作業内容を追加してください。'}</p>`;
-            return;
-        }
-        tasksToDisplay.forEach(task => taskButtonsContainer.appendChild(createTaskButton(task)));
-    }
-
-    function createTaskButton(task) {
-        const button = document.createElement('div');
-        button.className = 'task-button w-full text-left p-2 text-sm rounded-lg hover:bg-gray-100 cursor-pointer';
-        if (currentTask && currentTask.id === task.id) button.classList.add('bg-blue-100', 'text-blue-800', 'font-semibold');
-        
-        const lastViewed = localStorage.getItem(`lastViewed_${workspaceId}_${task.id}`) || 0;
-        const lastUpdatedMillis = task.lastUpdated ? task.lastUpdated.toMillis() : 0;
-        const isUnread = lastUpdatedMillis > lastViewed && task.lastUpdatedBy !== user.uid;
-        const indicatorHtml = isUnread ? `<span class="text-red-500 ml-2">●</span>` : '';
-
-        button.innerHTML = `
-            <span class="flex items-center">${escapeHtml(task.name)} ${indicatorHtml}</span>
-            <div class="task-button-actions space-x-2">
-                <button title="${task.archived ? 'アーカイブ解除' : 'アーカイブ'}" class="archive-task-btn text-gray-400 hover:text-yellow-500" data-id="${task.id}" data-archived="${task.archived || false}"><i class="fas fa-archive"></i></button>
-                <button title="削除" class="delete-task-btn text-gray-400 hover:text-red-500" data-id="${task.id}" data-name="${task.name}"><i class="fas fa-trash-alt"></i></button>
-            </div>
-        `;
-        button.onclick = (e) => {
-            if (!e.target.closest('button')) selectTask(task);
-        };
-        return button;
-    }
-
-    taskButtonsContainer.addEventListener('click', async (e) => {
-        const archiveBtn = e.target.closest('.archive-task-btn');
-        const deleteBtn = e.target.closest('.delete-task-btn');
-        if (archiveBtn) {
-            const id = archiveBtn.dataset.id;
-            const isArchived = archiveBtn.dataset.archived === 'true';
-            await updateDoc(doc(tasksCollectionRef, id), { archived: !isArchived });
-        }
-        if (deleteBtn) {
-            const id = deleteBtn.dataset.id;
-            const name = deleteBtn.dataset.name;
-            if (confirm(`作業内容「${name}」を削除しますか？`)) {
-                await deleteDoc(doc(tasksCollectionRef, id));
-            }
-        }
-    });
-
-    function selectTask(task) {
-        currentTask = task;
-        localStorage.setItem(`lastViewed_${workspaceId}_${task.id}`, Date.now());
-        displayTasks();
-        mainContentPlaceholder.classList.add('hidden');
-        taskNotesContainer.classList.remove('hidden');
-        taskTitle.textContent = task.name + ' - 作業メモ';
-        
-        if (window.innerWidth < 768) {
-            taskListSidebar.classList.add('-translate-x-full');
-            mainContentArea.classList.remove('translate-x-full');
-        }
-
-        loadNotes(task.id);
-    }
-
-    backToTasksBtn.addEventListener('click', () => {
-        taskListSidebar.classList.remove('-translate-x-full');
-        mainContentArea.classList.add('translate-x-full');
-    });
-
-    function loadNotes(taskId) {
-        if (unsubscribeNotes) unsubscribeNotes();
-        notesList.innerHTML = '<div class="text-center p-4">読み込み中...</div>';
-        const notesQuery = query(collection(db, "workspaces", workspaceId, "tasks", taskId, "notes"), orderBy("createdAt", "asc"));
-        unsubscribeNotes = onSnapshot(notesQuery, (snapshot) => {
-            const notesMap = new Map();
-            const parentNotes = [];
-            snapshot.docs.forEach(doc => notesMap.set(doc.id, { id: doc.id, ...doc.data(), replies: [] }));
-            for (const note of notesMap.values()) {
-                if (note.parentId && notesMap.has(note.parentId)) {
-                    notesMap.get(note.parentId).replies.push(note);
-                } else {
-                    parentNotes.push(note);
+                if (noteId && updatedAt) {
+                    const key = `lastViewed_note_${workspaceId}_${currentTask.id}_${noteId}`;
+                    // 👇 localStorageの更新のみ行う
+                    localStorage.setItem(key, updatedAt);
+                    // 👇 赤印を直接削除する処理をコメントアウト（または削除）
+                    // noteElement.querySelectorAll('.unread-indicator').forEach(el => el.remove());
+                    intersectionObserver.unobserve(noteElement);
                 }
             }
-            parentNotes.sort((a, b) => {
-                const aTime = a.createdAt ? a.createdAt.toMillis() : 0;
-                const bTime = b.createdAt ? b.createdAt.toMillis() : 0;
-                return (a.isHighlighted ? -1 : 1) - (b.isHighlighted ? -1 : 1) || (a.status === '完了' ? 1 : 0) - (b.status === '完了' ? 1 : 0) || bTime - aTime;
-            });
-            displayNotes(parentNotes);
         });
-    }
+    }, { threshold: 0.1 });
 
-    function displayNotes(parentNotes) {
-        notesList.innerHTML = '';
-        if (parentNotes.length === 0) {
-            notesList.innerHTML = '<div class="text-center p-4">まだメモがありません。</div>';
-            return;
+    // .unread-indicator を持つ要素を *含む*、[data-note-id] 属性を持つ要素を監視
+    document.querySelectorAll('.unread-indicator').forEach(indicator => {
+        const noteElement = indicator.closest('[data-note-id]');
+        if (noteElement) {
+            intersectionObserver.observe(noteElement);
         }
-        parentNotes.forEach(note => {
-            const noteThreadContainer = document.createElement('div');
-            noteThreadContainer.className = `note-thread ${note.status === '完了' ? 'opacity-50' : ''} ${note.isHighlighted ? 'highlighted' : ''}`;
-            noteThreadContainer.appendChild(createParentNoteElement(note));
-            note.replies.forEach(reply => noteThreadContainer.appendChild(createCommentElement(reply)));
-            noteThreadContainer.appendChild(createCommentFormElement(note.id));
-            notesList.appendChild(noteThreadContainer);
-        });
-    }
+    });
+}
 
-    function createParentNoteElement(note) {
-        const noteContainer = document.createElement('div');
-        noteContainer.id = `note-${note.id}`;
-        const timestamp = note.createdAt ? note.createdAt.toDate().toLocaleString('ja-JP') : '';
-        const attachmentsHtml = (note.attachments || []).map(file => `
-            <a href="${file.url}" target="_blank" class="attachment-link"><i class="fas fa-file-alt mr-1"></i>${escapeHtml(file.name)}</a>
-        `).join('');
-        const highlightClass = note.isHighlighted ? 'text-yellow-500' : 'text-gray-400';
+    // (A) `displayNotes`
+    function displayNotes(parentNotes) {
+        notesList.innerHTML = '';
+        if (parentNotes.length === 0) {
+            notesList.innerHTML = '<div class="text-center p-4">まだメモがありません。</div>';
+            return;
+        }
+        parentNotes.forEach(note => {
+            const noteThreadContainer = document.createElement('div');
+            noteThreadContainer.className = `note-thread ${note.status === '完了' ? 'opacity-50' : ''} ${note.isHighlighted ? 'highlighted' : ''}`;
+            
+            // (A) 親メモの未読判定
+           const lastViewedParent = Number(localStorage.getItem(`lastViewed_note_${workspaceId}_${currentTask.id}_${note.id}`) || 0);
+    const lastUpdatedParentMillis = (note.lastUpdatedAt || note.createdAt)?.toMillis() || 0;
+    const isParentUnread = lastUpdatedParentMillis > lastViewedParent && note.lastUpdatedBy !== user.uid;
+            
+            noteThreadContainer.appendChild(createParentNoteElement(note, isParentUnread, lastUpdatedParentMillis));
+            
+            note.replies.forEach(reply => {
+                // (A) コメントの未読判定
+                const lastViewedComment = Number(localStorage.getItem(`lastViewed_note_${workspaceId}_${currentTask.id}_${reply.id}`) || 0);
+        const lastUpdatedCommentMillis = (reply.lastUpdatedAt || reply.createdAt)?.toMillis() || 0;
+        const isCommentUnread = lastUpdatedCommentMillis > lastViewedComment && reply.lastUpdatedBy !== user.uid;
+                noteThreadContainer.appendChild(createCommentElement(reply, isCommentUnread, lastUpdatedCommentMillis));
+            });
+            
+            noteThreadContainer.appendChild(createCommentFormElement(note.id));
+            notesList.appendChild(noteThreadContainer);
+        });
+        
+        // (A) 描画後に未読監視を開始
+        observeVisibleNotes();
+    }
 
-        noteContainer.innerHTML = `
-            <div class="flex items-start space-x-3">
-                <div class="status-icon pt-1">${getStatusIcon(note.status)}</div>
-                <div class="flex-1 min-w-0">
-                    <p class="text-gray-800 whitespace-pre-wrap note-content">${escapeHtml(note.content)}</p>
-                    <div>${attachmentsHtml}</div>
-                    <div class="flex items-center justify-between text-xs text-gray-500 mt-2 pt-2 border-t">
-                        <span>by: ${escapeHtml(note.author)}</span><span>${timestamp}</span>
-                    </div>
-                </div>
-                <div class="flex flex-col items-end space-y-2">
-                    <select class="status-changer border rounded text-xs p-1" data-note-id="${note.id}">
-                        <option value="作業中" ${note.status === '作業中' ? 'selected' : ''}>作業中</option>
-                        <option value="要確認" ${note.status === '要確認' ? 'selected' : ''}>要確認</option>
-                        <option value="完了" ${note.status === '完了' ? 'selected' : ''}>完了</option>
-                    </select>
-                    <div class="note-actions flex items-center space-x-2">
-                        <button class="highlight-btn ${highlightClass} hover:text-yellow-500" data-note-id="${note.id}" title="注目"><i class="fas fa-star"></i></button>
-                        ${createButtonHtml('edit-btn', 'fa-pencil-alt', note.id)}
-                        ${createButtonHtml('delete-btn', 'fa-trash-alt', note.id)}
-                    </div>
-                </div>
-            </div>`;
-        return noteContainer;
-    }
-    
-    function createCommentElement(comment) {
-        const div = document.createElement('div');
-        div.id = `note-${comment.id}`;
-        div.className = 'comment-item p-3 bg-white rounded-xl text-sm';
-        const timestamp = comment.createdAt ? comment.createdAt.toDate().toLocaleString('ja-JP') : '';
-        const attachmentsHtml = (comment.attachments || []).map(file => `
-            <a href="${file.url}" target="_blank" class="attachment-link"><i class="fas fa-file-alt mr-1"></i>${escapeHtml(file.name)}</a>
-        `).join('');
-        div.innerHTML = `
-            <div class="flex items-start space-x-3">
-                <div class="pt-1"><i class="fas fa-comment-dots text-gray-400"></i></div>
-                <div class="flex-1 min-w-0">
-                    <p class="text-gray-700 whitespace-pre-wrap note-content">${escapeHtml(comment.content)}</p>
-                    <div>${attachmentsHtml}</div>
-                    <div class="flex items-center justify-between text-xs text-gray-500 mt-2 pt-2 border-t border-dashed">
-                        <span>by: ${escapeHtml(comment.author)}</span><span>${timestamp}</span>
-                    </div>
-                </div>
-                <div class="note-actions space-x-2">${createButtonHtml('edit-btn', 'fa-pencil-alt', comment.id)}${createButtonHtml('delete-btn', 'fa-trash-alt', comment.id)}</div>
-            </div>`;
-        return div;
-    }
+    // (A) `createParentNoteElement` を修正（data-* 属性を付与）
+ function createParentNoteElement(note, isUnread, lastUpdatedMillis) {
+    const noteContainer = document.createElement('div');
+    noteContainer.id = `note-${note.id}`;
+    noteContainer.dataset.noteId = note.id;
+    noteContainer.dataset.updatedAt = lastUpdatedMillis;
 
-    function createCommentFormElement(parentId) {
-        const div = document.createElement('div');
-        div.className = 'comment-form-container';
-        div.innerHTML = `
-            <form class="comment-form" data-parent-id="${parentId}">
-                <div class="relative">
-                    <input type="text" class="comment-input w-full border rounded px-2 py-1 text-sm" placeholder="追加コメント...">
-                    <button type="button" class="quick-reply-btn absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded hover:bg-gray-300">了解です</button>
+    const timestamp = note.createdAt ? note.createdAt.toDate().toLocaleString('ja-JP') : '';
+    const attachmentsHtml = (note.attachments || []).map(file => `
+        <a href="${file.url}" target="_blank" class="attachment-link"><i class="fas fa-file-alt mr-1"></i>${escapeHtml(file.name)}</a>
+    `).join('');
+    const highlightClass = note.isHighlighted ? 'text-yellow-500' : 'text-gray-400';
+
+    // (A) 未読インジケーターHTML
+    const indicatorHtml = isUnread ? `<span class="unread-indicator text-red-500 mr-1">●</span>` : '';
+
+    noteContainer.innerHTML = `
+        <div class="flex items-start space-x-3">
+            <div class="status-icon pt-1">${getStatusIcon(note.status)}</div>
+            <div class="flex-1 min-w-0">
+                <p class="text-gray-800 whitespace-pre-wrap note-content">${escapeHtml(note.content)}</p>
+                <div>${attachmentsHtml}</div>
+                <div class="flex items-center justify-between text-xs text-gray-500 mt-2 pt-2 border-t">
+                    
+                    <span class="flex items-center">
+                        ${indicatorHtml}
+                        <span>by: ${escapeHtml(note.author)}</span>
+                    </span>
+                    <span>${timestamp}</span>
                 </div>
-                <div class="comment-attachments-preview mt-2 text-xs"></div>
-                <div class="flex items-center justify-end space-x-2 mt-2">
-                    <label class="cursor-pointer text-gray-500 hover:text-blue-500"><i class="fas fa-paperclip"></i>
-                        <input type="file" class="comment-file-input hidden" multiple>
-                    </label>
-                    <button type="submit" class="px-3 py-1 text-white bg-gray-500 rounded hover:bg-gray-600 text-sm">送信</button>
+            </div>
+            <div class="flex flex-col items-end space-y-2">
+                <select class="status-changer border rounded text-xs p-1" data-note-id="${note.id}">
+                    <option value="作業中" ${note.status === '作業中' ? 'selected' : ''}>作業中</option>
+                    <option value="要確認" ${note.status === '要確認' ? 'selected' : ''}>要確認</option>
+                    <option value="完了" ${note.status === '完了' ? 'selected' : ''}>完了</option>
+                </select>
+                <div class="note-actions flex items-center space-x-2">
+                    <button class="highlight-btn ${highlightClass} hover:text-yellow-500" data-note-id="${note.id}" title="注目"><i class="fas fa-star"></i></button>
+                    ${createButtonHtml('edit-btn', 'fa-pencil-alt', note.id)}
+                    ${createButtonHtml('delete-btn', 'fa-trash-alt', note.id)}
                 </div>
-            </form>`;
-        return div;
-    }
+            </div>
+        </div>`;
+    return noteContainer;
+}
+
+    // (A) `createCommentElement` を修正（data-* 属性を付与）
+  function createCommentElement(comment, isUnread, lastUpdatedMillis) {
+    const div = document.createElement('div');
+    div.id = `note-${comment.id}`;
+    div.className = 'comment-item p-3 bg-white rounded-xl text-sm';
+    div.dataset.noteId = comment.id;
+    div.dataset.updatedAt = lastUpdatedMillis;
+
+    const timestamp = comment.createdAt ? comment.createdAt.toDate().toLocaleString('ja-JP') : '';
+    const attachmentsHtml = (comment.attachments || []).map(file => `
+        <a href="${file.url}" target="_blank" class="attachment-link"><i class="fas fa-file-alt mr-1"></i>${escapeHtml(file.name)}</a>
+    `).join('');
+
+    // (A) 未読インジケーターHTML
+    const indicatorHtml = isUnread ? `<span class="unread-indicator text-red-500 mr-1">●</span>` : '';
+
+    div.innerHTML = `
+        <div class="flex items-start space-x-3">
+            <div class="pt-1"><i class="fas fa-comment-dots text-gray-400"></i></div>
+            <div class="flex-1 min-w-0">
+                <p class="text-gray-700 whitespace-pre-wrap note-content">${escapeHtml(comment.content)}</p>
+                <div>${attachmentsHtml}</div>
+                <div class="flex items-center justify-between text-xs text-gray-500 mt-2 pt-2 border-t border-dashed">
+                  
+                    <span class="flex items-center">
+                        ${indicatorHtml}
+                        <span>by: ${escapeHtml(comment.author)}</span>
+                    </span>
+                    <span>${timestamp}</span>
+                </div>
+            </div>
+            <div class="note-actions space-x-2">${createButtonHtml('edit-btn', 'fa-pencil-alt', comment.id)}${createButtonHtml('delete-btn', 'fa-trash-alt', comment.id)}</div>
+        </div>`;
+    return div;
+}
+
+   function createCommentFormElement(parentId) {
+    const div = document.createElement('div');
+    // 👇 修正箇所: flex-shrink-0 をクラスに追加
+    div.className = 'comment-form-container flex-shrink-0'; // 親要素がflexアイテムの場合に伸びるのを防ぐ
+    div.innerHTML = `
+        <form class="comment-form" data-parent-id="${parentId}">
+            <div class="relative">
+                <input type="text" class="comment-input w-full border rounded px-2 py-1 text-sm" placeholder="追加コメント...">
+                <button type="button" class="quick-reply-btn absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded hover:bg-gray-300">了解です</button>
+            </div>
+            <div class="comment-attachments-preview mt-2 text-xs"></div>
+            <div class="flex items-center justify-end space-x-2 mt-2">
+                <label class="cursor-pointer text-gray-500 hover:text-blue-500"><i class="fas fa-paperclip"></i>
+                    <input type="file" class="comment-file-input hidden" multiple>
+                </label>
+                <button type="submit" class="px-3 py-1 text-white bg-gray-500 rounded hover:bg-gray-600 text-sm">送信</button>
+            </div>
+        </form>`;
+    return div;
+}
 
 const createButtonHtml = (className, icon, noteId) => `<button class="${className}" data-note-id="${noteId}" title="${className === 'edit-btn' ? '編集' : '削除'}"><i class="fas ${icon}"></i></button>`;
-    
-    async function updateTaskTimestamp(taskId) {
-        const taskRef = doc(tasksCollectionRef, taskId);
-        await updateDoc(taskRef, { lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
-        await updateDoc(workspaceRef, { lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
-    }
+    
+    // (E) updateTaskTimestamp を改修
+    async function updateTaskTimestamp(taskId, noteIdToUpdate = null) {
+        try {
+            const batch = writeBatch(db);
+            const updateData = {
+                lastUpdated: serverTimestamp(),
+                lastUpdatedBy: user.uid
+            };
+            
+            // 1. タスク自体のタイムスタンプを更新
+            const taskRef = doc(tasksCollectionRef, taskId);
+            batch.update(taskRef, updateData);
+            
+            // 2. ワークスペースのタイムスタンプを更新
+            batch.update(workspaceRef, updateData);
+            
+            // 3. (E) 指定された親メモのタイムスタンプも更新
+            if (noteIdToUpdate) {
+                const noteRef = doc(db, "workspaces", workspaceId, "tasks", taskId, "notes", noteIdToUpdate);
+                // (A) lastUpdatedAt / lastUpdatedBy を使用
+                batch.update(noteRef, {
+                    lastUpdatedAt: serverTimestamp(),
+                    lastUpdatedBy: user.uid
+                });
+            }
+            
+            await batch.commit();
+        } catch (error) {
+            console.error("Error updating timestamps:", error);
+        }
+    }
 
-    addTaskForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const input = document.getElementById('new-task-name');
-        const name = input.value.trim();
-        if (!name) return;
-        await addDoc(tasksCollectionRef, { name, createdAt: serverTimestamp(), lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid, archived: false });
-        await updateDoc(workspaceRef, { lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
-        input.value = '';
-    });
+    addTaskForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const input = document.getElementById('new-task-name');
+        const name = input.value.trim();
+        if (!name) return;
+        // (A) タスク作成時にもタイムスタンプ保存
+        await addDoc(tasksCollectionRef, { 
+            name, 
+            createdAt: serverTimestamp(), 
+            lastUpdated: serverTimestamp(), 
+            lastUpdatedBy: user.uid, 
+            archived: false 
+        });
+        await updateDoc(workspaceRef, { lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
+        input.value = '';
+    });
 
-    noteFileInput.addEventListener('change', (e) => {
-        noteFiles = Array.from(e.target.files);
-        noteAttachmentsPreview.innerHTML = noteFiles.map(f => `<span>${escapeHtml(f.name)}</span>`).join(', ');
-    });
-    notesList.addEventListener('change', (e) => {
-        if (e.target.classList.contains('comment-file-input')) {
-            const form = e.target.closest('form');
-            const parentId = form.dataset.parentId;
-            commentFiles[parentId] = Array.from(e.target.files);
-            const preview = form.querySelector('.comment-attachments-preview');
-            preview.innerHTML = commentFiles[parentId].map(f => `<span>${escapeHtml(f.name)}</span>`).join(', ');
-        }
-    });
+    noteFileInput.addEventListener('change', (e) => {
+        noteFiles = Array.from(e.target.files);
+        noteAttachmentsPreview.innerHTML = noteFiles.map(f => `<span>${escapeHtml(f.name)}</span>`).join(', ');
+    });
+    notesList.addEventListener('change', (e) => {
+        if (e.target.classList.contains('comment-file-input')) {
+            const form = e.target.closest('form');
+            const parentId = form.dataset.parentId;
+            commentFiles[parentId] = Array.from(e.target.files);
+            const preview = form.querySelector('.comment-attachments-preview');
+            preview.innerHTML = commentFiles[parentId].map(f => `<span>${escapeHtml(f.name)}</span>`).join(', ');
+        }
+    });
 
-    async function uploadFiles(files, taskId) {
-        const uploadPromises = files.map(file => {
-            const storageRef = ref(storage, `${workspaceId}/${taskId}/${Date.now()}_${file.name}`);
-            return uploadBytes(storageRef, file).then(snapshot => getDownloadURL(snapshot.ref));
-        });
-        const urls = await Promise.all(uploadPromises);
-        return files.map((file, index) => ({ name: file.name, url: urls[index] }));
-    }
+    async function uploadFiles(files, taskId) {
+        const uploadPromises = files.map(file => {
+            const storageRef = ref(storage, `${workspaceId}/${taskId}/${Date.now()}_${file.name}`);
+            return uploadBytes(storageRef, file).then(snapshot => getDownloadURL(snapshot.ref));
+        });
+        const urls = await Promise.all(uploadPromises);
+        return files.map((file, index) => ({ name: file.name, url: urls[index] }));
+    }
 
-    noteForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const author = authorInput.value.trim();
-        const content = document.getElementById('note-textarea').value.trim();
-        if (!currentTask || (!content && noteFiles.length === 0) || !author) {
-            showMessage('投稿者名と内容を入力してください。', true);
-            return;
-        }
-        
-        const attachments = noteFiles.length > 0 ? await uploadFiles(noteFiles, currentTask.id) : [];
-        
-        const notesCollectionRef = collection(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes");
-        await addDoc(notesCollectionRef, {
-            author, content, attachments,
-            status: document.getElementById('status-select').value,
-            parentId: null,
-            createdAt: serverTimestamp(),
-            isHighlighted: false
-        });
-        await updateTaskTimestamp(currentTask.id);
-        
-        document.getElementById('note-textarea').value = '';
-        noteFiles = [];
-        noteAttachmentsPreview.innerHTML = '';
-        noteFileInput.value = '';
-    });
+    noteForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const author = authorInput.value.trim();
+        const content = document.getElementById('note-textarea').value.trim();
+        if (!currentTask || (!content && noteFiles.length === 0) || !author) {
+            showMessage('投稿者名と内容を入力してください。', true);
+            return;
+        }
+        
+        const attachments = noteFiles.length > 0 ? await uploadFiles(noteFiles, currentTask.id) : [];
+        
+        const notesCollectionRef = collection(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes");
+        await addDoc(notesCollectionRef, {
+            author, content, attachments,
+            status: document.getElementById('status-select').value,
+            parentId: null,
+            createdAt: serverTimestamp(),
+            // (A) タイムスタンプ保存
+            lastUpdatedAt: serverTimestamp(),
+            lastUpdatedBy: user.uid,
+           isHighlighted: false
+        });
+        // (E) 親メモ作成時は、親メモ自体のIDを渡す必要はない（タスクだけ更新）
+        await updateTaskTimestamp(currentTask.id);
+        
+        document.getElementById('note-textarea').value = '';
+        noteFiles = [];
+        noteAttachmentsPreview.innerHTML = '';
+        noteFileInput.value = '';
+    });
 
-    notesList.addEventListener('submit', async (e) => {
-        if (e.target.classList.contains('comment-form')) {
-            e.preventDefault();
-            const form = e.target;
-            const parentId = form.dataset.parentId;
-            const author = authorInput.value.trim();
-            const content = form.querySelector('.comment-input').value.trim();
-            const files = commentFiles[parentId] || [];
+    notesList.addEventListener('submit', async (e) => {
+        if (e.target.classList.contains('comment-form')) {
+            e.preventDefault();
+            const form = e.target;
+            const parentId = form.dataset.parentId;
+            const author = authorInput.value.trim();
+            const content = form.querySelector('.comment-input').value.trim();
+            const files = commentFiles[parentId] || [];
 
-            if (!currentTask || (!content && files.length === 0) || !author) {
-                showMessage('投稿者名と内容を入力してください。', true);
-                return;
-            }
+            if (!currentTask || (!content && files.length === 0) || !author) {
+                showMessage('投稿者名と内容を入力してください。', true);
+                return;
+            }
 
-            const attachments = files.length > 0 ? await uploadFiles(files, currentTask.id) : [];
-            
-            const notesCollectionRef = collection(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes");
-            await addDoc(notesCollectionRef, {
-                author, content, attachments, parentId, status: '', createdAt: serverTimestamp()
-            });
-            await updateTaskTimestamp(currentTask.id);
+            const attachments = files.length > 0 ? await uploadFiles(files, currentTask.id) : [];
+            
+            const notesCollectionRef = collection(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes");
+            await addDoc(notesCollectionRef, {
+                author, content, attachments, parentId, status: '', 
+                createdAt: serverTimestamp(),
+                // (A) タイムスタンプ保存
+                lastUpdatedAt: serverTimestamp(),
+                lastUpdatedBy: user.uid
+            });
+            // (E) コメント追加時は、親メモID (parentId) を渡す
+            await updateTaskTimestamp(currentTask.id, parentId);
 
-            form.reset();
-            commentFiles[parentId] = [];
-            form.querySelector('.comment-attachments-preview').innerHTML = '';
-        }
-    });
-    
-    notesList.addEventListener('click', async (e) => {
-        const editBtn = e.target.closest('.edit-btn');
-        const deleteBtn = e.target.closest('.delete-btn');
-        const statusChanger = e.target.closest('.status-changer');
-        const highlightBtn = e.target.closest('.highlight-btn');
-        const quickReplyBtn = e.target.closest('.quick-reply-btn');
+            form.reset();
+            commentFiles[parentId] = [];
+            form.querySelector('.comment-attachments-preview').innerHTML = '';
+        }
+    });
+    
+    notesList.addEventListener('click', async (e) => {
+        const editBtn = e.target.closest('.edit-btn');
+        const deleteBtn = e.target.closest('.delete-btn');
+        const statusChanger = e.target.closest('.status-changer');
+        const highlightBtn = e.target.closest('.highlight-btn');
+        const quickReplyBtn = e.target.closest('.quick-reply-btn');
 
-        if(quickReplyBtn) {
-            const form = quickReplyBtn.closest('form');
-            form.querySelector('.comment-input').value = '了解です';
-            form.querySelector('button[type="submit"]').click();
-        }
+        if(quickReplyBtn) {
+            const form = quickReplyBtn.closest('form');
+            form.querySelector('.comment-input').value = '了解です';
+            form.querySelector('button[type="submit"]').click();
+        }
 
-        if (highlightBtn) {
-            const noteId = highlightBtn.dataset.noteId;
-            const noteRef = doc(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes", noteId);
-            const docSnap = await getDoc(noteRef);
-            if (docSnap.exists()) {
-                await updateDoc(noteRef, { isHighlighted: !docSnap.data().isHighlighted });
-            }
-        }
+        if (highlightBtn) {
+            const noteId = highlightBtn.dataset.noteId;
+            const noteRef = doc(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes", noteId);
+            const docSnap = await getDoc(noteRef);
+            if (docSnap.exists()) {
+                // (A) タイムスタンプ更新
+                await updateDoc(noteRef, { 
+                    isHighlighted: !docSnap.data().isHighlighted,
+                    lastUpdatedAt: serverTimestamp(),
+                    lastUpdatedBy: user.uid
+                });
+                // (E) 注目は親メモのみなので、noteId をそのまま渡す
+                await updateTaskTimestamp(currentTask.id, noteId);
+            }
+        }
 
-        if (editBtn) {
-            const noteId = editBtn.dataset.noteId;
-            const noteElement = document.getElementById(`note-${noteId}`);
-            const contentP = noteElement.querySelector('.note-content');
-            
-            if (noteElement.querySelector('.edit-area')) return;
+        if (editBtn) {
+            const noteId = editBtn.dataset.noteId;
+            const noteElement = document.getElementById(`note-${noteId}`);
+            const contentP = noteElement.querySelector('.note-content');
+            
+            if (noteElement.querySelector('.edit-area')) return;
 
-            const currentContent = contentP.innerText;
-            contentP.style.display = 'none';
+            // (B) 編集開始
+            setEditingStatus(true);
 
-            const editArea = document.createElement('div');
-            editArea.className = 'edit-area mt-2';
-            editArea.innerHTML = `
-                <textarea class="w-full border rounded p-2 text-sm">${currentContent}</textarea>
-                <div class="text-right mt-2 space-x-2">
-                    <button class="save-edit-btn px-3 py-1 bg-blue-500 text-white rounded text-xs">保存</button>
-                    <button class="cancel-edit-btn px-3 py-1 bg-gray-300 rounded text-xs">キャンセル</button>
-                </div>
-            `;
-            contentP.after(editArea);
-            
-            editArea.querySelector('.save-edit-btn').onclick = async () => {
-                const newContent = editArea.querySelector('textarea').value;
-                if (newContent.trim() !== '') {
-                    const noteRef = doc(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes", noteId);
-                    await updateDoc(noteRef, { content: newContent.trim() });
-                    await updateTaskTimestamp(currentTask.id);
-                }
-                editArea.remove();
-                contentP.style.display = '';
-            };
+            const currentContent = contentP.innerText;
+            contentP.style.display = 'none';
 
-            editArea.querySelector('.cancel-edit-btn').onclick = () => {
-                editArea.remove();
-                contentP.style.display = '';
-            };
-        }
+            const editArea = document.createElement('div');
+            editArea.className = 'edit-area mt-2';
+            editArea.innerHTML = `
+                <textarea class="w-full border rounded p-2 text-sm">${currentContent}</textarea>
+                <div class="text-right mt-2 space-x-2">
+                    <button class="save-edit-btn px-3 py-1 bg-blue-500 text-white rounded text-xs">保存</button>
+                    <button class="cancel-edit-btn px-3 py-1 bg-gray-300 rounded text-xs">キャンセル</button>
+                </div>
+            `;
+            contentP.after(editArea);
+            
+            editArea.querySelector('.save-edit-btn').onclick = async () => {
+                const newContent = editArea.querySelector('textarea').value;
+                const noteRef = doc(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes", noteId);
+                
+                // (E) 親IDを特定するため
+                const noteDoc = await getDoc(noteRef);
+                const parentId = noteDoc.exists() ? noteDoc.data().parentId : null;
+                
+                if (newContent.trim() !== '') {
+                    // (A) タイムスタンプ更新
+                    await updateDoc(noteRef, { 
+                        content: newContent.trim(),
+                        lastUpdatedAt: serverTimestamp(),
+                        lastUpdatedBy: user.uid
+                    });
+                    // (E) 編集時、コメントならparentIdを、親メモならnoteIdを渡す
+                    await updateTaskTimestamp(currentTask.id, parentId || noteId);
+                }
+               editArea.remove();
+                contentP.style.display = '';
+                // (B) 編集終了
+                setEditingStatus(false);
+            };
 
-        if (deleteBtn) {
-            const noteId = deleteBtn.dataset.noteId;
-            if (confirm('このメモ（と返信）を削除しますか？')) {
-                const noteRef = doc(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes", noteId);
-                await deleteDoc(noteRef);
-                await updateTaskTimestamp(currentTask.id);
-            }
-        }
+            editArea.querySelector('.cancel-edit-btn').onclick = () => {
+                // (B) 編集終了
+                setEditingStatus(false);
+                editArea.remove();
+                contentP.style.display = '';
+            };
+        }
 
-        if (statusChanger) {
-            const noteId = statusChanger.dataset.noteId;
-            const newStatus = statusChanger.value;
-            const noteRef = doc(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes", noteId);
-            await updateDoc(noteRef, { status: newStatus });
-            await updateTaskTimestamp(currentTask.id);
-        }
-    });
+        if (deleteBtn) {
+            const noteId = deleteBtn.dataset.noteId;
+            if (confirm('このメモ（と返信）を削除しますか？')) {
+                // (C) バッチ処理を try の直前（confirm の内側）で定義
+                const batch = writeBatch(db);
+                try {
+                    const noteRef = doc(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes", noteId);
+                    
+                    // (E) 削除前に親IDを特定
+                    const noteDoc = await getDoc(noteRef);
+                    let parentIdToUpdate = null;
+                    if (noteDoc.exists() && noteDoc.data().parentId) {
+                        parentIdToUpdate = noteDoc.data().parentId;
+                    }
 
-  }
+                    // 1. 本体を削除バッチに追加
+                 batch.delete(noteRef);
+                    
+                    // 2. 子コメント（返信）もすべて削除バッチに追加 (Cの要件充足)
+                    const repliesQuery = query(collection(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes"), where("parentId", "==", noteId));
+                 const repliesSnapshot = await getDocs(repliesQuery);
+                    repliesSnapshot.forEach(doc => {
+                        batch.delete(doc.ref);
+                    });
+                    
+                    await batch.commit();
+                    
+                    // (E) 削除時、コメントなら親IDを、親メモなら null (タスクのみ更新) を渡す
+                    await updateTaskTimestamp(currentTask.id, parentIdToUpdate);
+                
+                } catch (error) {
+                    console.error("Error deleting note(s):", error);
+                    showMessage('削除に失敗しました。', true);
+                }
+            }
+        }
+
+        if (statusChanger) {
+           const noteId = statusChanger.dataset.noteId;
+            const newStatus = statusChanger.value;
+            const noteRef = doc(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes", noteId);
+            // (A) タイムスタンプ更新
+            await updateDoc(noteRef, { 
+                status: newStatus,
+               lastUpdatedAt: serverTimestamp(),
+                lastUpdatedBy: user.uid
+            });
+            // (E) ステータス変更は親メモのみなので、noteId をそのまま渡す
+            await updateTaskTimestamp(currentTask.id, noteId);
+        }
+    });
+
+  }
 </script>
 </body>
 </html>
-
