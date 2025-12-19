@@ -144,8 +144,14 @@
             <div class="flex items-center">
                 <button id="back-to-tasks-btn" class="mr-4 text-gray-500"><i class="fas fa-arrow-left"></i></button>
                 <h1 id="task-title" class="text-xl font-bold"></h1>
+                
                 <button id="refresh-notes-btn" class="hidden ml-4 px-3 py-1 bg-yellow-500 text-white rounded text-xs hover:bg-yellow-600">
                   <i class="fas fa-sync-alt mr-1"></i>更新あり
+                </button>
+
+                <button id="export-notes-btn" class="ml-2 px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700" title="Excel形式で出力">
+                  <i class="fas fa-file-export mr-1"></i>Excel出力
+                </button>
             </div>
             <div><label for="author-input" class="text-sm mr-2">投稿者:</label><input type="text" id="author-input" class="p-1 border rounded text-sm w-32" placeholder="名前を入力"></div>
         </div>
@@ -956,7 +962,66 @@ document.getElementById('import-file-input').addEventListener('change', async (e
             e.target.value = ''; // ファイル入力をリセット
         }
     });
+// --- Excel エクスポート機能 ---
+document.getElementById('export-notes-btn').addEventListener('click', async () => {
+        if (!currentTask) return;
 
+        try {
+            // 現在のタスク内のメモを全取得（作成順）
+            const q = query(collection(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes"), orderBy("createdAt", "asc"));
+            const snapshot = await getDocs(q);
+
+            if (snapshot.empty) {
+                showMessage('出力するメモがありません。', true);
+                return;
+            }
+
+            // データ作成: インポート形式に合わせる
+            // Row 1: タイトル (B1セル)
+            // Row 2: ヘッダー (インポート時はスキップされる行なので、項目名を入れておく)
+            // Row 3~: データ
+            const exportData = [
+                ["リスト名:", currentTask.name], // 1行目
+                ["内容", "担当者", "ステータス", "作成日時"], // 2行目 (ヘッダー)
+            ];
+
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                const dateStr = data.createdAt ? data.createdAt.toDate().toLocaleString('ja-JP') : "";
+                
+                // 親メモのみ、あるいはコメントも含めるか？
+                // ここではシンプルに「すべてのメモ」をフラットに出力します
+                // インポート形式に合わせて [内容(A), 担当者(B)] を配置
+                exportData.push([
+                    data.content,     // A列
+                    data.author,      // B列
+                    data.status,      // C列 (インポート時は無視されるが、見る用にあると便利)
+                    dateStr           // D列 (同上)
+                ]);
+            });
+
+            // ワークブック作成
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(exportData);
+
+            // 列幅の調整（見やすくする）
+            ws['!cols'] = [
+                { wch: 40 }, // A列: 内容 (広め)
+                { wch: 15 }, // B列: 担当者
+                { wch: 10 }, // C列: ステータス
+                { wch: 20 }  // D列: 日時
+            ];
+
+            XLSX.utils.book_append_sheet(wb, ws, "メモ一覧");
+
+            // ファイル保存 (タスク名.xlsx)
+            XLSX.writeFile(wb, `${currentTask.name}.xlsx`);
+            
+        } catch (error) {
+            console.error("Export error:", error);
+            showMessage('エクスポートに失敗しました。', true);
+        }
+    });
     noteFileInput.addEventListener('change', (e) => {
         noteFiles = Array.from(e.target.files);
         noteAttachmentsPreview.innerHTML = noteFiles.map(f => `<span>${escapeHtml(f.name)}</span>`).join(', ');
