@@ -451,7 +451,7 @@ let intersectionObserver = null;
         const isUnread = lastUpdatedMillis > lastViewed && task.lastUpdatedBy !== user.uid;
         const indicatorHtml = isUnread ? `<span class="text-red-500 ml-2 unread-indicator">●</span>` : '';
 
-        // ★追加: インポートされた担当者名があれば表示
+        // インポートされた担当者名があれば表示
         const authorHtml = task.importedAuthor ? `<span class="text-xs text-gray-400 ml-1">(${escapeHtml(task.importedAuthor)})</span>` : '';
 
         button.innerHTML = `
@@ -461,7 +461,9 @@ let intersectionObserver = null;
             ${indicatorHtml}
         </span>
 
-        <div class="task-button-actions">
+        <div class="task-button-actions flex items-center">
+            <button title="名称変更" class="edit-task-btn text-gray-400 hover:text-green-500 mr-2" data-id="${task.id}" data-name="${task.name}"><i class="fas fa-pencil-alt"></i></button>
+            
             <button title="${task.archived ? 'アーカイブ解除' : 'アーカイブ'}" class="archive-task-btn text-gray-400 hover:text-yellow-500 mr-2" data-id="${task.id}" data-archived="${task.archived || false}"><i class="fas fa-archive"></i></button>
             <button title="削除" class="delete-task-btn text-gray-400 hover:text-red-500" data-id="${task.id}" data-name="${task.name}"><i class="fas fa-trash-alt"></i></button>
         </div>
@@ -472,31 +474,60 @@ let intersectionObserver = null;
         return button;
     }
 
-    taskButtonsContainer.addEventListener('click', async (e) => {
-        const archiveBtn = e.target.closest('.archive-task-btn');
-        const deleteBtn = e.target.closest('.delete-task-btn');
-        if (archiveBtn) {
-            const id = archiveBtn.dataset.id;
-            const isArchived = archiveBtn.dataset.archived === 'true';
-            // (A) アーカイブ時もタイムスタンプ更新
-            await updateDoc(doc(tasksCollectionRef, id), { 
-                archived: !isArchived, 
-                lastUpdated: serverTimestamp(), 
-                lastUpdatedBy: user.uid 
-            });
-            // (E) ワークスペースのタイムスタンプも更新
-            await updateDoc(workspaceRef, { lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
-        }
-        if (deleteBtn) {
-            const id = deleteBtn.dataset.id;
-            const name = deleteBtn.dataset.name;
-            if (confirm(`作業内容「${name}」を削除しますか？`)) {
-                await deleteDoc(doc(tasksCollectionRef, id));
-                // (E) ワークスペースのタイムスタンプも更新
-                await updateDoc(workspaceRef, { lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
-            }
-        }
-    });
+      taskButtonsContainer.addEventListener('click', async (e) => {
+        const archiveBtn = e.target.closest('.archive-task-btn');
+        const deleteBtn = e.target.closest('.delete-task-btn');
+        const editBtn = e.target.closest('.edit-task-btn'); // ★追加
+
+        // ★追加: 名称変更処理
+        if (editBtn) {
+            e.stopPropagation(); // ボタンクリックでタスク選択されないようにする
+            const id = editBtn.dataset.id;
+            const currentName = editBtn.dataset.name;
+            const newName = prompt("新しい作業内容名を入力してください:", currentName);
+            
+            if (newName && newName.trim() !== '' && newName !== currentName) {
+                try {
+                    // タスク名を更新
+                    await updateDoc(doc(tasksCollectionRef, id), { 
+                        name: newName.trim(), 
+                        lastUpdated: serverTimestamp(), 
+                        lastUpdatedBy: user.uid 
+                    });
+                    // ワークスペースの更新日時も更新（並び順などのため）
+                    await updateDoc(workspaceRef, { lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
+                } catch (error) {
+                    console.error("Error updating task name:", error);
+                    showMessage('名称の変更に失敗しました。', true);
+                }
+            }
+        }
+
+        if (archiveBtn) {
+            e.stopPropagation();
+            const id = archiveBtn.dataset.id;
+            const isArchived = archiveBtn.dataset.archived === 'true';
+            // (A) アーカイブ時もタイムスタンプ更新
+            await updateDoc(doc(tasksCollectionRef, id), { 
+                archived: !isArchived, 
+                lastUpdated: serverTimestamp(), 
+                lastUpdatedBy: user.uid 
+            });
+            // (E) ワークスペースのタイムスタンプも更新
+            await updateDoc(workspaceRef, { lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
+        }
+
+        if (deleteBtn) {
+            e.stopPropagation();
+            const id = deleteBtn.dataset.id;
+            const name = deleteBtn.dataset.name;
+            if (confirm(`作業内容「${name}」を削除しますか？`)) {
+                await deleteDoc(doc(tasksCollectionRef, id));
+                // (E) ワークスペースのタイムスタンプも更新
+                await updateDoc(workspaceRef, { lastUpdated: serverTimestamp(), lastUpdatedBy: user.uid });
+            }
+        }
+    });
 
     function selectTask(task) {
         currentTask = task;
