@@ -962,13 +962,13 @@ document.getElementById('import-file-input').addEventListener('change', async (e
             e.target.value = ''; // ファイル入力をリセット
         }
     });
-// --- Excel エクスポート機能 ---
+// --- Excel エクスポート機能 (横並び形式: 1行1スレッド) ---
 document.getElementById('export-notes-btn').addEventListener('click', async () => {
         if (!currentTask) return;
 
         try {
-            // 現在のタスク内のメモを全取得（作成順）
-            const q = query(collection(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes"), orderBy("createdAt", "asc"));
+            // 現在のタスク内のメモを全取得
+            const q = query(collection(db, "workspaces", workspaceId, "tasks", currentTask.id, "notes"));
             const snapshot = await getDocs(q);
 
             if (snapshot.empty) {
@@ -976,45 +976,98 @@ document.getElementById('export-notes-btn').addEventListener('click', async () =
                 return;
             }
 
-            // データ作成: インポート形式に合わせる
-            // Row 1: タイトル (B1セル)
-            // Row 2: ヘッダー (インポート時はスキップされる行なので、項目名を入れておく)
-            // Row 3~: データ
+            // 1. データを親と子(返信)に分ける
+            const allNotes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const parentNotes = [];
+            const repliesMap = {}; // 親IDをキーにした返信リスト
+
+            allNotes.forEach(note => {
+                if (note.parentId) {
+                    if (!repliesMap[note.parentId]) {
+                        repliesMap[note.parentId] = [];
+                    }
+                    repliesMap[note.parentId].push(note);
+                } else {
+                    parentNotes.push(note);
+                }
+            });
+
+            // 2. 日付順にソートする関数
+            const sortByDate = (a, b) => {
+                const dateA = a.createdAt ? a.createdAt.toMillis() : 0;
+                const dateB = b.createdAt ? b.createdAt.toMillis() : 0;
+                return dateA - dateB;
+            };
+
+            // 親を日付順にソート
+            parentNotes.sort(sortByDate);
+
+            // 3. エクスポート用データの作成
+            // 基本ヘッダー
+            const headerRow = ["内容", "担当者", "ステータス", "作成日時"];
+            const dataRows = [];
+            let maxReplies = 0; // 最も多い返信数を記録してヘッダーを拡張する
+
+            parentNotes.forEach(parent => {
+                const parentDate = parent.createdAt ? parent.createdAt.toDate().toLocaleString('ja-JP') : "";
+                
+                // 親メモの行データを作成
+                const row = [
+                    parent.content,       // A列
+                    parent.author,        // B列
+                    parent.status,        // C列
+                    parentDate            // D列
+                ];
+
+                // 返信があれば右に追加していく
+                if (repliesMap[parent.id]) {
+                    const replies = repliesMap[parent.id].sort(sortByDate);
+                    // 最大返信数を更新（ヘッダー用）
+                    if (replies.length > maxReplies) {
+                        maxReplies = replies.length;
+                    }
+
+                    replies.forEach(reply => {
+                        // 返信内容と担当者をセットで追加
+                        row.push(reply.content); // E, G, I...
+                        row.push(reply.author);  // F, H, J...
+                    });
+                }
+                dataRows.push(row);
+            });
+
+            // ヘッダーに返信用の列を追加
+            for (let i = 1; i <= maxReplies; i++) {
+                headerRow.push(`返信${i}`);
+                headerRow.push(`担当${i}`);
+            }
+
+            // 最終的なデータ配列
             const exportData = [
                 ["リスト名:", currentTask.name], // 1行目
-                ["内容", "担当者", "ステータス", "作成日時"], // 2行目 (ヘッダー)
+                headerRow,                       // 2行目 (動的ヘッダー)
+                ...dataRows                      // 3行目以降
             ];
-
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                const dateStr = data.createdAt ? data.createdAt.toDate().toLocaleString('ja-JP') : "";
-                
-                // 親メモのみ、あるいはコメントも含めるか？
-                // ここではシンプルに「すべてのメモ」をフラットに出力します
-                // インポート形式に合わせて [内容(A), 担当者(B)] を配置
-                exportData.push([
-                    data.content,     // A列
-                    data.author,      // B列
-                    data.status,      // C列 (インポート時は無視されるが、見る用にあると便利)
-                    dateStr           // D列 (同上)
-                ]);
-            });
 
             // ワークブック作成
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(exportData);
 
-            // 列幅の調整（見やすくする）
+            // 列幅の調整
             ws['!cols'] = [
-                { wch: 40 }, // A列: 内容 (広め)
-                { wch: 15 }, // B列: 担当者
+                { wch: 40 }, // A列: 親メモ内容
+                { wch: 15 }, // B列: 親担当者
                 { wch: 10 }, // C列: ステータス
-                { wch: 20 }  // D列: 日時
+                { wch: 20 }, // D列: 日時
+                // 返信列用（少し狭めにしておく）
+                { wch: 30 }, { wch: 10 }, 
+                { wch: 30 }, { wch: 10 },
+                { wch: 30 }, { wch: 10 } 
             ];
 
             XLSX.utils.book_append_sheet(wb, ws, "メモ一覧");
 
-            // ファイル保存 (タスク名.xlsx)
+            // ファイル保存
             XLSX.writeFile(wb, `${currentTask.name}.xlsx`);
             
         } catch (error) {
